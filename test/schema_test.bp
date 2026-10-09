@@ -17,7 +17,7 @@ import {schemas};
 import {schemas.Schema};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
-import {json, json.Json, collections.Set, collections.Dict} from "std";
+import {json, json.Json, collections.Set, collections.Dict, querystring} from "std";
 
 #[schema]
 pub type Signup(
@@ -577,4 +577,32 @@ test "validation: a #[rest] member is decoded at its own key" {
     val ok = try json.decode("""{"kind": "a", "x": 1}""") catch Json.Null;
     val e = try parseEnvelope(ok);
     assert e.fields.keys().join(",") == "x";
+}
+
+// ── step 6: the form binder ─────────────────────────────────────────────────
+
+#[schema]
+pub type FormSignup(
+    email: string,
+    age: i32,
+    tags: Array<string>,
+)
+
+test "validation: bind over form pairs reports what does not read and builds nothing" {
+    val pairs = try querystring.parse(
+        "email=a%40b.c&age=x&tags=a&tags=b",
+    ) catch [];
+    assert codesOf(bindFormSignup(pairs)) == "age:invalidType";
+    val good = try querystring.parse(
+        "email=a%40b.c&age=30&tags=a&tags=b",
+    ) catch [];
+    val s = try bindFormSignup(good);
+    assert s.tags.join(",") == "a,b";
+    assert s.age == 30;
+    assert s.email == "a@b.c";
+}
+
+test "validation: a name the record does not declare is the unknown-key rule" {
+    val pairs = try querystring.parse("email=a&age=1&admin=1") catch [];
+    assert codesOf(bindFormSignup(pairs)) == "admin:unrecognizedKey";
 }

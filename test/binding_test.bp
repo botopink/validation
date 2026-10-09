@@ -13,7 +13,7 @@
 //// a test that inherited another test's leftovers would be asserting the wrong
 //// thing.
 
-import {binding.bindInt, binding.bindBool, binding.bindRequired, binding.bindEpochMillis, binding.bindingReport, binding.bindingCount, binding.bindingReset, binding.bindingIsolated, binding.isIntegerText, binding.parseI32};
+import {binding.bindInt, binding.bindBool, binding.bindRequired, binding.bindEpochMillis, binding.bindingReport, binding.bindingCount, binding.bindingReset, binding.bindingIsolated, binding.isIntegerText, binding.parseI32, binding.bindFloat};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 
@@ -169,4 +169,16 @@ test "validation: the report a handler answers with is one problem document" {
     assert body.contains(
         "{\"field\":\"name\",\"code\":\"required\",\"message\":\"must be present\"}",
     );
+}
+
+test "validation: bindFloat reads std's numeral grammar and records a mismatch otherwise" {
+    val _r = bindingReset();
+    assert bindFloat("ratio", " 2.5 ") == 2.5;
+    assert bindFloat("ratio", "1e3") == 1000.0;
+    assert bindingCount() == 0;
+    assert bindFloat("ratio", ".5") == 0.0;
+    assert bindFloat("ratio", "abc") == 0.0;
+    val report = bindingReport();
+    assert report.violations.map({ v -> v.field + ":" + v.code }).join(",")
+        == "ratio:typeMismatch,ratio:typeMismatch";
 }

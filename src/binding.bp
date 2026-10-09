@@ -150,6 +150,21 @@ pub fn bindBool(field: string, raw: string) -> bool {
     return false;
 }
 
+// An `f64` from std's numeral grammar (`String.parseFloat`: sign, digits, a
+// fraction with digits on both sides, an exponent); anything else is a
+// `typeMismatch` and `0.0`.
+pub fn bindFloat(field: string, raw: string) -> f64 {
+    return case raw.trim().parseFloat() {
+        Ok(n) -> n;
+        Error(_) -> floatMismatch(field, raw);
+    };
+}
+
+fn floatMismatch(field: string, raw: string) -> f64 {
+    val _v = record(field, "typeMismatch", raw, [arg("type", "number")]);
+    return 0.0;
+}
+
 // The distinction `Request` cannot make: `""` is ABSENT, and absent is a
 // violation coded `required` rather than a zero-length value the handler has to
 // notice on its own.

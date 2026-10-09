@@ -262,6 +262,66 @@ pub type Bad(
     );
 }
 
+// ── step 6: coercion and transforms ─────────────────────────────────────────
+
+test "validation: #[coerce] on a type it cannot read from text, and a transform on a non-text field, are refused" {
+    val coerced = checked(
+        "schema_coerce_list",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.coerce, decorators.trim} from "validation";
+
+#[schema]
+pub type Bad(
+    #[coerce] ids: Array<i32>,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        coerced,
+        "#[schema] on field `ids` of `Bad`: #[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `Array<i32>`",
+        "6:3",
+    );
+    val trimmed = checked(
+        "schema_trim_number",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.coerce, decorators.trim} from "validation";
+
+#[schema]
+pub type Bad(
+    #[trim] n: i32,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        trimmed,
+        "#[schema] on field `n` of `Bad`: a transform rewrites text, and this field is `i32`",
+        "6:3",
+    );
+}
+
+test "validation: a decoding marker on a #[validated] type that is not #[schema] is refused" {
+    val out = checked(
+        "validated_coerce_without_schema",
+        """import {decorators.validated, decorators.coerce} from "validation";
+import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
+
+#[validated]
+pub type Bad(
+    #[coerce] age: i32,
+)
+""",
+    );
+    assert refusedWith(
+        out,
+        "#[coerce] on field `age` of `Bad`: it says how a document is decoded, and `Bad` is not #[schema] - nothing would read it",
+        "4:3",
+    );
+}
+
 // ── every marker on a field type it cannot check ────────────────────────────
 //
 // One row per marker of `decorators.markerNames()`: the marker, its arguments

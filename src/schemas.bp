@@ -31,7 +31,8 @@
 import {report.Violation, report.ValidationReport, report.violation};
 import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate};
 import {path.key, path.index};
-import {json, json.Json, collections.Dict, collections.Set} from "std";
+import {formats.isIsoDatetime, formats.isIsoDatetimeOffset};
+import {json, json.Json, collections.Dict, collections.Set, io.clock, unicode, unicode.NormalizationForm, url} from "std";
 
 pub type Schema<T>(
     run: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
@@ -638,4 +639,188 @@ pub fn widened(n: f64) -> i64 {
 // which of a record's `#[fallback]` fields failed their checks.
 pub fn failedFields(report: ValidationReport) -> Array<string> {
     return report.violations.map({ v -> v.field });
+}
+
+// ── step 6: coercion, transforms, the form binder ───────────────────────────
+//
+// Coercion is the same on both targets (decision 183): a text is read by the
+// type it is coerced to, and a text that type does not read STAYS TEXT, so the
+// decoder refuses it as `invalidType` — never a zero. `bool` reads the
+// stringbool set (`"false"` is `false`, not Zod's truthiness); a number reads
+// std's numeral grammar (`String.parseInt` for an integer, `parseFloat` for an
+// `f64`); `""` is absent.
+
+fn truthyWords() -> Array<string> {
+    return ["true", "1", "yes", "on", "y", "enabled"];
+}
+
+fn falsyWords() -> Array<string> {
+    return ["false", "0", "no", "off", "n", "disabled"];
+}
+
+fn isIntegerNumeral(text: string) -> bool {
+    return case text.parseInt() {
+        Ok(_) -> true;
+        Error(_) -> false;
+    };
+}
+
+fn millisAsFloat(ms: i64) -> f64 {
+    return try [ms].join("").parseFloat() catch 0.0;
+}
+
+// A text as the type `hint` reads it: `i32`, `i64`, `f64`, `bool`, `isoUtc` /
+// `isoOffset` (an RFC 3339 instant as epoch milliseconds — `#[coerce]
+// #[isoDatetime]` / `#[isoDatetimeOffset]` on an `i64`), `stringbool` and
+// `string` (the text itself).
+fn fromText(text: string, hint: string) -> Json {
+    if (hint == "string" || hint == "stringbool") return Json.Str(text);
+    if (text == "") return Json.Null;
+    if (hint == "i32" || hint == "i64") {
+        if (isIntegerNumeral(text) == false) return Json.Str(text);
+        return case text.parseFloat() {
+            Ok(n) -> Json.Num(n);
+            Error(_) -> Json.Str(text);
+        };
+    }
+    if (hint == "f64")
+        return case text.parseFloat() {
+            Ok(n) -> Json.Num(n);
+            Error(_) -> Json.Str(text);
+        }
+    if (hint == "bool") {
+        val word = text.toLower();
+        if (truthyWords().indexOf(word) >= 0) return Json.Bool(true);
+        if (falsyWords().indexOf(word) >= 0) return Json.Bool(false);
+        return Json.Str(text);
+    }
+    if (hint == "isoUtc" || hint == "isoOffset") {
+        val shaped = if (hint == "isoUtc")
+            isIsoDatetime(text)
+        else
+            isIsoDatetimeOffset(text);
+        if (shaped == false) return Json.Str(text);
+        return case clock.parseIso8601(text) {
+            Ok(ms) -> Json.Num(millisAsFloat(ms));
+            Error(_) -> Json.Str(text);
+        };
+    }
+    return Json.Str(text);
+}
+
+// `#[coerce]`: a document value read as `hint` says. A `string` field takes a
+// number or a boolean rendered; every other type takes text by its grammar.
+// `null` stays absent (Zod's `"null"` is not taken — decision 183).
+pub fn coerced(input: Json, hint: string) -> Json {
+    val k = kindOf(input);
+    if (hint == "string") {
+        if (k == "a number" || k == "a boolean") return Json.Str(shown(input));
+        return input;
+    }
+    if (k != "text") return input;
+    return fromText(textOf(input), hint);
+}
+
+// `#[stringbool]`: a text of the stringbool set, case-insensitive — `true 1
+// yes on y enabled` / `false 0 no off n disabled`; anything else, a JSON
+// boolean included, is `invalidType`.
+pub fn decodeStringBool(
+    input: Json,
+    at: string,
+) -> @Result<bool, ValidationReport> {
+    val k = kindOf(input);
+    if (k == "null") throw missing(at);
+    val word = textOf(input).toLower();
+    val known = k == "text"
+        && (truthyWords().indexOf(word) >= 0
+            || falsyWords().indexOf(word) >= 0);
+    if (known == false)
+        throw wrongType(
+            at,
+            "one of true, 1, yes, on, y, enabled, false, 0, no, off, n, disabled",
+            input,
+        );
+    return truthyWords().indexOf(word) >= 0;
+}
+
+// The transforms of a text field, in the order the field writes them, applied
+// by the decoder before the checks: `trim`, `lowercased`, `uppercased`,
+// `normalized:<NFC|NFD|NFKC|NFKD>`, `normalizedUrl` (`url.serialize` of
+// `url.parse`).
+pub fn transformText(text: string, ops: string) -> string {
+    return ops.split("|").fold(text, { acc, op -> transformOne(acc, op) });
+}
+
+fn transformOne(text: string, op: string) -> string {
+    if (op == "trim") return text.trim();
+    if (op == "lowercased") return text.toLower();
+    if (op == "uppercased") return text.toUpper();
+    if (op == "normalizedUrl") return url.serialize(url.parse(text));
+    if (op == "normalized:NFD")
+        return unicode.normalize(text, NormalizationForm.NFD);
+    if (op == "normalized:NFKC")
+        return unicode.normalize(text, NormalizationForm.NFKC);
+    if (op == "normalized:NFKD")
+        return unicode.normalize(text, NormalizationForm.NFKD);
+    if (op == "normalized:NFC")
+        return unicode.normalize(text, NormalizationForm.NFC);
+    return text;
+}
+
+pub fn transformOptional(text: ?string, ops: string) -> ?string {
+    if (text == null) return null;
+    return transformText(text ?? "", ops);
+}
+
+// The form binder's document: form pairs (what `querystring.parse` and
+// `encoding.formParse` answer) as the object `parse` reads, one member per
+// declared field typed by its hint — `list:<hint>` for an `Array<T>` / `Set<T>`
+// (every value of a repeated name, in order; none is `[]`), `opt:<hint>` for a
+// `?T`, `raw` for a type a form cannot say (the text, refused by its decoder).
+// A `bool` with no value is `false` (an unchecked checkbox sends nothing); a
+// value-less member is left out, so absence is the decoder's; a name the type
+// does not declare is a member, for the unknown-key rule.
+pub fn formDocument(
+    pairs: Array<#(string, string)>,
+    hints: Array<#(string, string)>,
+) -> Json {
+    var members: Array<#(string, Json)> = [];
+    var i = 0;
+    while (i < hints.length) {
+        val h = hints.at(i) ?? #("", "");
+        val values = pairs.filter({ p -> p[0] == h[0] }).map({ p -> p[1] });
+        val v = formValue(values, h[1]);
+        members = case v {
+            Null -> members;
+            _ -> members.append([#(h[0], v)]);
+        };
+        i = i + 1;
+    }
+    val names = hints.map({ h -> h[0] });
+    val extra = pairs
+        .filter({ p -> names.indexOf(p[0]) < 0 })
+        .map({ p -> #(p[0], Json.Str(p[1])) });
+    return Json.Obj(members.append(extra));
+}
+
+fn formValue(values: Array<string>, hint: string) -> Json {
+    if (hint.startsWith("list:")) {
+        val item = hint.slice(5, hint.length());
+        return Json.Arr(values.map({ v -> formScalar(v, item) }));
+    }
+    if (hint.startsWith("opt:")) {
+        if (values.length == 0) return Json.Null;
+        return formScalar(values.at(0) ?? "", hint.slice(4, hint.length()));
+    }
+    if (values.length == 0) {
+        if (hint == "bool") return Json.Bool(false);
+        if (hint == "stringbool") return Json.Str("false");
+        return Json.Null;
+    }
+    return formScalar(values.at(0) ?? "", hint);
+}
+
+fn formScalar(text: string, hint: string) -> Json {
+    if (hint == "raw") return Json.Str(text);
+    return fromText(text, hint);
 }

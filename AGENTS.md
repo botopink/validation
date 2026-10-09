@@ -31,6 +31,7 @@ A `#[validated]` record in a consumer imports only `from "validation"` and
 ```text
 validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
+│                     (`files`: formats before schemas — the coercion of an ISO instant reads its shape)
 ├── AGENTS.md         ← you are here
 ├── src/
 │   ├── root.bp         pub mod path; report; table; messages; schemas; spi; formats; constraints; binding; decorators
@@ -46,7 +47,8 @@ validation/
 │   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
 │   │                   `#[schema]` calls: memberPath, indexPath, objectProblems, unknownKeys,
 │   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
-│   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields;
+│   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields,
+│   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument;
 │   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
@@ -54,12 +56,13 @@ validation/
 │   ├── formats.bp      the string formats as walks or intersection-grammar regexes: is<Format>(s) for every
 │   │                   format marker, <name>Pattern() per regex format, urlParts, digitsValue (no host cell)
 │   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern
-│   ├── binding.bp      bindInt, bindBool, bindRequired, bindEpochMillis, bindingReport, bindingCount,
+│   ├── binding.bp      bindInt, bindBool, bindFloat, bindRequired, bindEpochMillis, bindingReport, bindingCount,
 │   │                   bindingReset, bindingIsolated, isIntegerText, parseI32   (accumulator: templates)
 │   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
 │                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
-│                       #[orElseOf], #[fallback], #[fallbackOf]
-└── test/             binding · checks_and_formats_example · collections_example · constraints ·
+│                       #[orElseOf], #[fallback], #[fallbackOf], #[coerce], #[stringbool], #[trim],
+│                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl]
+└── test/             binding · checks_and_formats_example · coercion_and_forms_example · collections_example · constraints ·
                       enums_and_unions_example · messages · nested_and_arrays_example ·
                       object_policy_example · parity · path ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
@@ -158,7 +161,9 @@ the step before it, named after the type as `#[validated]`'s functions are:
 pub fn parse<TypeName>At(input: Json, at: string) -> @Result<TypeName, ValidationReport>
 pub fn parse<TypeName>(input: Json) -> @Result<TypeName, ValidationReport>
 pub fn decode<TypeName>(text: string) -> @Result<TypeName, ValidationReport>
+pub fn bind<TypeName>(pairs: Array<#(string, string)>) -> @Result<TypeName, ValidationReport>   // a record
 pub fn schemaOf<TypeName>() -> Schema<TypeName>
+pub fn optionsOf<TypeName>() -> Array<string>                                                   // an enum
 ```
 
 - **Fields it decodes:** `string`, `i32`, `i64`, `f64`, `bool`, `Json`, `?T`,
@@ -214,6 +219,25 @@ pub fn schemaOf<TypeName>() -> Schema<TypeName>
   281). Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
   is not `Dict<string, T>` or twice, `#[rest]` beside `#[stripUnknown]`, a
   default beside `#[rest]` / `#[present]`.
+- **Coercion, transforms, the form binder** (step 6). `#[coerce]` on a
+  `string`, `i32`, `i64`, `f64` or `bool` field (or its `?T`) reads text by the
+  type (`schemas.coerced`, decision 183): a number by std's numeral grammar, a
+  `bool` by the stringbool set (`"false"` is `false`), a `string` from a number
+  or a boolean; text the type does not read stays text and is `invalidType`,
+  never a zero; `""` is absent. `#[coerce] #[isoDatetime]` (or
+  `#[isoDatetimeOffset]`) on an `i64` reads an RFC 3339 instant as epoch
+  milliseconds — `#[validated]` then emits no check for that marker, the
+  decoder has read it. `#[stringbool]` on a `bool` takes only text of the set
+  (`true 1 yes on y enabled` / `false 0 no off n disabled`, case-insensitive).
+  The transforms `#[trim]`, `#[lowercased]`, `#[uppercased]`,
+  `#[normalized("NFC")]`, `#[normalizedUrl]` rewrite a text field in the order
+  written, after a default and before the checks. `bind<TypeName>(pairs)` reads
+  form pairs (`querystring.parse`, `encoding.formParse`) through
+  `schemas.formDocument` into the document `parse<TypeName>At` reads: every
+  field by its type as `#[coerce]` would, a repeated name as an array's items
+  (none is `[]`), a `bool` with no value `false`, a name the type does not
+  declare the unknown-key rule. A decoding marker on a `#[validated]` type that
+  is not `#[schema]` is refused — nothing would read it.
 - **The checks are `#[validated]`'s.** A type that carries constraint markers
   is also `#[validated]`; the emitted decoder calls `validate<TypeName>` on the
   record it built and re-roots the report under the record's path

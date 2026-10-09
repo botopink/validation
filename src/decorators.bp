@@ -214,7 +214,7 @@ pub fn validated(comptime decl: @Decl) {
                 val rule = markerRule(n, t, declared, q, read, a.args, names);
                 if (rule.startsWith("!"))
                     why = rule.slice(1, rule.length())
-                else
+                else if (rule != "-")
                     call = rule;
             }
             if (nullable && n != "notNull" && call != "" && zero == "") {
@@ -244,6 +244,23 @@ pub fn validated(comptime decl: @Decl) {
             if (call != "") rows.push(f.name + "|" + n + suffix);
         });
     });
+    val parsed = decl.annotations.filter({ a -> a.name == "schema" }).length
+        > 0;
+    decl.fields.forEach({ f ->
+        val decodeOnly = f.annotations.filter(
+            { a -> decodeMarkers().indexOf(a.name) >= 0 },
+        );
+        if (parsed == false && decodeOnly.length > 0)
+            problem = "#["
+                + decodeOnly.slice(0, 1).map({ a -> a.name }).join("")
+                + "] on field `"
+                + f.name
+                + "` of `"
+                + decl.name
+                + "`: it says how a document is decoded, and `"
+                + decl.name
+                + "` is not #[schema] - nothing would read it";
+    });
     decl.addMember(
         "pub fn validate(self: Self) -> ValidationReport {\n    val v = self;\n    var __vs: Array<Violation> = [];\n"
             + calls.join("\n")
@@ -261,6 +278,27 @@ pub fn validated(comptime decl: @Decl) {
         decl.fail("#[validated] must annotate a type");
     if (decl.variants.length > 0)
         decl.fail("#[validated] must annotate a type with fields, not an enum");
+}
+
+// The field markers only `#[schema]`'s decoder reads: on a `#[validated]` type
+// that is not `#[schema]` each is a marker nothing would read, and refused.
+fn decodeMarkers() -> Array<string> {
+    return [
+        "exhaustive",
+        "rest",
+        "present",
+        "orElse",
+        "orElseOf",
+        "fallback",
+        "fallbackOf",
+        "coerce",
+        "stringbool",
+        "trim",
+        "lowercased",
+        "uppercased",
+        "normalized",
+        "normalizedUrl",
+    ];
 }
 
 // ── the constraint markers ──────────────────────────────────────────────────
@@ -475,6 +513,10 @@ fn markerRule(
 ) -> string {
     val raw = args.join(", ");
     val first = args.slice(0, 1).join("");
+    val readAtDecode = (n == "isoDatetime" || n == "isoDatetimeOffset")
+        && t == "i64"
+        && names.indexOf("coerce") >= 0;
+    if (readAtDecode) return "-";
     if (listed(plainTextMarkers(), n)) {
         if (t != "string") return refusedOn("`string`", declared);
         return predicateOf(n) + "(" + q + ", " + read + ")";
@@ -1532,6 +1574,43 @@ fn isNumberLexeme(l: string) -> bool {
 // type `t` (its `?` taken off; `declared` as written), or `"!" + why` when the
 // lexeme is not a value of that type. A default of another type — an enum, a
 // record — waits on typed decorator arguments (decision 281).
+fn transformNames() -> Array<string> {
+    return ["trim", "lowercased", "uppercased", "normalized", "normalizedUrl"];
+}
+
+// What `#[coerce]` reads a field's text as (`schemas.coerced`); `""` for a type
+// it does not coerce. An `i64` beside `#[isoDatetime]` / `#[isoDatetimeOffset]`
+// reads an RFC 3339 instant as epoch milliseconds (Zod's `z.coerce.date()`).
+fn coerceHint(t: string, names: Array<string>) -> string {
+    if (t == "string" || t == "i32" || t == "f64" || t == "bool") return t;
+    if (t == "i64") {
+        if (names.indexOf("isoDatetime") >= 0) return "isoUtc";
+        if (names.indexOf("isoDatetimeOffset") >= 0) return "isoOffset";
+        return "i64";
+    }
+    return "";
+}
+
+// How the form binder reads a field from text (`schemas.formDocument`).
+fn formHint(declared: string, names: Array<string>) -> string {
+    if (names.indexOf("stringbool") >= 0) return "stringbool";
+    if (declared.startsWith("?"))
+        return "opt:"
+            + formScalarHint(declared.slice(1, declared.length()), names);
+    if (schemaIsList(declared))
+        return "list:" + formScalarHint(schemaItemOf(declared), names);
+    if (schemaIsSet(declared))
+        return "list:"
+            + formScalarHint(schemaArgs(declared).slice(0, 1).join(""), names);
+    return formScalarHint(declared, names);
+}
+
+fn formScalarHint(t: string, names: Array<string>) -> string {
+    val h = coerceHint(t, names);
+    if (h == "") return "raw";
+    return h;
+}
+
 fn literalFor(l: string, t: string, declared: string) -> string {
     if (t == "string") {
         if (l.startsWith("\"") && l.endsWith("\"") && l.length() >= 2) return l;
@@ -1582,6 +1661,7 @@ pub fn schema(comptime decl: @Decl) {
     var known: Array<string> = [];
     var helpers: Array<string> = [];
     var fallbacks: Array<string> = [];
+    var hints: Array<string> = [];
     var problem = "";
     var marked = false;
     var rests = 0;
@@ -1591,12 +1671,49 @@ pub fn schema(comptime decl: @Decl) {
         val source = "(input.field(\"" + f.name + "\") ?? Json.Null)";
         val path = "schemas.memberPath(at, \"" + f.name + "\")";
         val supported = schemaSupported(declared);
-        val decoded = if (supported)
-            schemaCall(declared, "input", "at", decl.name, f.name, "0")
+        val where = "#[schema] on field `"
+            + f.name
+            + "` of `"
+            + decl.name
+            + "`: ";
+        val bare = if (declared.startsWith("?"))
+            declared.slice(1, declared.length())
+        else
+            declared;
+        val isCoerced = names.indexOf("coerce") >= 0;
+        val isStringBool = names.indexOf("stringbool") >= 0;
+        val hint = coerceHint(bare, names);
+        if (isCoerced && hint == "")
+            problem = where
+                + "#[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `"
+                + declared
+                + "`";
+        if (isStringBool && declared != "bool")
+            problem = where
+                + "#[stringbool] reads text as a `bool`, and this field is `"
+                + declared
+                + "`";
+        if (isStringBool && isCoerced)
+            problem = where
+                + "#[stringbool] already reads the field from text - drop #[coerce]";
+        val coercedInput = if (isCoerced && hint != "")
+            "schemas.coerced(input, \"" + hint + "\")"
+        else
+            "input";
+        val coercedSource = if (isCoerced && hint != "")
+            "schemas.coerced(" + source + ", \"" + hint + "\")"
+        else
+            source;
+        val decoded = if (isStringBool)
+            "schemas.decodeStringBool(input, at)"
+        else if (supported)
+            schemaCall(declared, coercedInput, "at", decl.name, f.name, "0")
         else
             "0";
-        var call = if (supported)
-            schemaCall(declared, source, path, decl.name, f.name, "0")
+        var call = if (isStringBool)
+            "schemas.decodeStringBool(" + source + ", " + path + ")"
+        else if (supported)
+            schemaCall(declared, coercedSource, path, decl.name, f.name, "0")
         else
             "0";
         if (supported)
@@ -1609,15 +1726,6 @@ pub fn schema(comptime decl: @Decl) {
                 + "` is `"
                 + declared
                 + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, Array<T>, Set<T>, Dict<K, V> (K string, i32 or a #[schema] enum), tuples, unions and other #[schema] types";
-        val where = "#[schema] on field `"
-            + f.name
-            + "` of `"
-            + decl.name
-            + "`: ";
-        val bare = if (declared.startsWith("?"))
-            declared.slice(1, declared.length())
-        else
-            declared;
         val exhaustive = names.indexOf("exhaustive") >= 0;
         val isRest = names.indexOf("rest") >= 0;
         val isPresent = names.indexOf("present") >= 0;
@@ -1641,6 +1749,20 @@ pub fn schema(comptime decl: @Decl) {
                 .map({ a -> a.args.join("") })
                 .join(""),
         );
+        val ops = f.annotations
+            .filter({ a -> transformNames().indexOf(a.name) >= 0 })
+            .map({ a ->
+                if (a.name == "normalized")
+                    "normalized:" + unquoted(a.args.join(""))
+                else
+                    a.name;
+            })
+            .join("|");
+        if (ops != "" && bare != "string")
+            problem = where
+                + "a transform rewrites text, and this field is `"
+                + declared
+                + "`";
         f.annotations.forEach({ a ->
             if (schemaIsMarker(a.name)) marked = true;
         });
@@ -1674,6 +1796,12 @@ pub fn schema(comptime decl: @Decl) {
                 "0",
             );
         }
+        // The wrappers, innermost first: the default an absent key takes, the
+        // transforms (a default is transformed like an input — Zod's
+        // `.prefault`), the fallback. Each is one emitted function over the
+        // one inside it; the field calls the outermost.
+        var inner = decoded;
+        var outer = "";
         val orElse = if (orElseLexeme != "")
             literalFor(orElseLexeme, bare, declared)
         else if (orElseFn != "")
@@ -1687,13 +1815,12 @@ pub fn schema(comptime decl: @Decl) {
                 + decl.name
                 + "`: "
                 + orElse.slice(1, orElse.length());
-        if (orElse != ""
-            && orElse.startsWith("!") == false
-            && (isRest || isPresent))
+        val hasOrElse = orElse != "" && orElse.startsWith("!") == false;
+        if (hasOrElse && (isRest || isPresent))
             problem = where
                 + "a default is what an absent key takes, and #[rest] / #[present] say what absence means already";
-        val orElseName = "__orElse" + decl.name + "_" + f.name;
-        if (orElse != "" && orElse.startsWith("!") == false) {
+        if (hasOrElse) {
+            val orElseName = "__orElse" + decl.name + "_" + f.name;
             helpers.push(
                 "fn "
                     + orElseName
@@ -1701,10 +1828,35 @@ pub fn schema(comptime decl: @Decl) {
                     + "    if (schemas.isNull(input)) return "
                     + orElse
                     + ";\n    return try "
-                    + decoded
+                    + inner
                     + ";\n}\n",
             );
-            call = orElseName + "(" + source + ", " + path + ")";
+            inner = orElseName + "(input, at)";
+            outer = orElseName;
+        }
+        if (ops != ""
+            && bare == "string"
+            && isRest == false
+            && isPresent == false) {
+            val transformName = "__transform" + decl.name + "_" + f.name;
+            val apply = if (declared.startsWith("?"))
+                "schemas.transformOptional"
+            else
+                "schemas.transformText";
+            helpers.push(
+                "fn "
+                    + transformName
+                    + schemaResult(declared)
+                    + "    val __s = try "
+                    + inner
+                    + ";\n    return "
+                    + apply
+                    + "(__s, \""
+                    + ops
+                    + "\");\n}\n",
+            );
+            inner = transformName + "(input, at)";
+            outer = transformName;
         }
         val fallback = if (fallbackLexeme != "")
             literalFor(fallbackLexeme, bare, declared)
@@ -1720,10 +1872,6 @@ pub fn schema(comptime decl: @Decl) {
                 + "`: "
                 + fallback.slice(1, fallback.length());
         if (fallback != "" && fallback.startsWith("!") == false) {
-            val inner = if (orElse != "" && orElse.startsWith("!") == false)
-                orElseName + "(input, at)"
-            else
-                decoded;
             val fallbackName = "__fallback" + decl.name + "_" + f.name;
             helpers.push(
                 "fn "
@@ -1735,7 +1883,7 @@ pub fn schema(comptime decl: @Decl) {
                     + fallback
                     + ";\n    return try __r;\n}\n",
             );
-            call = fallbackName + "(" + source + ", " + path + ")";
+            outer = fallbackName;
             fallbacks.push(
                 f.name
                     + ": if (__bad.indexOf(\""
@@ -1746,6 +1894,11 @@ pub fn schema(comptime decl: @Decl) {
                     + f.name,
             );
         }
+        if (outer != "") call = outer + "(" + source + ", " + path + ")";
+        if (isRest == false)
+            hints.push(
+                "#(\"" + f.name + "\", \"" + formHint(declared, names) + "\")",
+            );
         decoders.push("    val __r_" + f.name + " = " + call + ";");
         gathers.push(
             "    __vs = __vs.append(schemas.violationsOf(__r_" + f.name + "));",
@@ -1833,6 +1986,15 @@ pub fn schema(comptime decl: @Decl) {
             + ");\n"
             + checks
             + "}\n"
+            + "pub fn bind"
+            + decl.name
+            + "(pairs: Array<#(string, string)>) -> @Result<"
+            + decl.name
+            + ", ValidationReport> {\n    return try parse"
+            + decl.name
+            + "At(schemas.formDocument(pairs, ["
+            + hints.join(", ")
+            + "]), \"\");\n}\n"
             + schemaCommon(decl.name);
     if (recordText != "") @emit(recordText);
     if (problem != "") decl.fail(problem);
@@ -1917,4 +2079,49 @@ pub fn fallbackOf(comptime decl: @Decl, comptime function: string) {
         decl.fail("#[fallbackOf] must annotate a field");
     val problem = textArgProblem("fallbackOf", "function name", function);
     if (problem != "") decl.fail(problem);
+}
+
+// ── step 6: coercion and transforms ─────────────────────────────────────────
+
+// `z.coerce.*`: the field reads text by its type (`schemas.coerced`) — a
+// number by std's numeral grammar, a `bool` by the stringbool set, a `string`
+// from a number or a boolean; an `i64` beside `#[isoDatetime]` reads an
+// instant as epoch milliseconds.
+pub fn coerce(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[coerce] must annotate a field");
+}
+
+// `z.stringbool()`: a `bool` field read from the stringbool set's text.
+pub fn stringbool(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[stringbool] must annotate a field");
+}
+
+// The transforms of a text field, applied in the order the field writes them,
+// before its checks run.
+pub fn trim(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field) decl.fail("#[trim] must annotate a field");
+}
+
+pub fn lowercased(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[lowercased] must annotate a field");
+}
+
+pub fn uppercased(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[uppercased] must annotate a field");
+}
+
+pub fn normalized(comptime decl: @Decl, comptime form: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[normalized] must annotate a field");
+    if (form != "NFC" && form != "NFD" && form != "NFKC" && form != "NFKD")
+        decl.fail("#[normalized]: the form is one of NFC, NFD, NFKC, NFKD");
+}
+
+pub fn normalizedUrl(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[normalizedUrl] must annotate a field");
 }
