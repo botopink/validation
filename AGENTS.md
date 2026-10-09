@@ -1,9 +1,8 @@
-# libs/validation/
+# validation
 
-> Path: `libs/validation/`
-> Parent: [`../AGENTS.md`](../AGENTS.md)
+> Repository: `botopink/validation` (`git@github.com:botopink/validation.git`) · in the meta checkout: `repository/validation/`
 
-The bundled `validation` library (decision 116 rule 5): constraint markers,
+The `validation` library (decision 116 rule 5): constraint markers,
 `#[validated]`, the violation report, the constraint table, typed coercion, and
 — since `specs/1.0.11-beta/07-bundled-libs/125-validation-zod` — `#[schema]`,
 the decoder from a `Json` document to a typed record.
@@ -17,18 +16,20 @@ target-native code is inline `#[@External.<Target>(…)]` templates (decision 11
 rule 8). Module atoms follow decision 109: `validation@report`,
 `validation@report@@ValidationReport`.
 
-**Bundled.** `build.zig`'s `bundled_packages` names it: any program's
-`from "validation"` loads the copy embedded in the compiler (as
-`validation/<module>`), with no `dependencies` entry and never from this
-directory; listing `validation` in `dependencies` is refused. A `#[validated]`
-record in a consumer imports only `from "validation"` and `from "std"` and
-answers the same report on erlang and commonJS (measured on a scratch
-consumer). An edit here reaches a consumer only through a rebuilt compiler.
+**A library of its own** (decision 326). It was bundled with the compiler until
+`03-bundled-libs/138` moved it here with its history; the compiler now embeds std alone.
+A program that imports `from "validation"` declares it in `dependencies` (decision 242) —
+`{ "validation": { "git": "https://github.com/botopink/validation.git", "branch": "feat" } }`; inside the meta checkout that entry
+resolves by name through the `repository/` root (`repository/validation`), elsewhere
+through the install store. Without the entry, `from "validation"` is
+`unresolved import source "validation" — declare it in botopink.json "dependencies"`.
+A `#[validated]` record in a consumer imports only `from "validation"` and
+`from "std"` and answers the same report on erlang and commonJS.
 
 ## Tree
 
 ```text
-libs/validation/
+validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
@@ -216,9 +217,9 @@ from here, never rakun's placement-only `#[validated]`, and never both.
 ## Testing
 
 ```sh
-../../zig-out/bin/botopink test --target erlang
-../../zig-out/bin/botopink test --target commonJS
-../../zig-out/bin/botopink format --check src test
+../botopink-lang/zig-out/bin/botopink test --target erlang
+../botopink-lang/zig-out/bin/botopink test --target commonJS
+../botopink-lang/zig-out/bin/botopink format --check src test
 ```
 
 `*_example_test.bp` are the front's `examples/` files as suite cases, byte for
@@ -226,7 +227,10 @@ byte but for the import lines (a module of this package cannot name it
 `from "validation"` — the namespace is unbound in emitted code). A refusal is a
 case of `refusal_test.bp`: it writes a one-file project under
 `BOTOPINK_TEST_TMPDIR`, runs `botopink check` on it (`BOTOPINK_BIN`, else the
-checkout's `zig-out/bin/botopink`) and asserts status, message and location.
+meta checkout's `repository/botopink-lang/zig-out/bin/botopink`, else a
+`botopink-lang/repository/validation` CI layout's `botopink-lang/zig-out/bin/botopink`)
+and asserts status, message and location. The fixture's `botopink.json` declares
+`validation` by `path` — this package's directory — as any consumer must (decision 242).
 
 Tests import the package's modules by their path inside the braces
 (`import {report.Violation};`, decision 206), as any package's tests do. Every test that depends on message templates sets its
@@ -310,3 +314,24 @@ library writes instead.
   (`schemas.bp`) is the host cell that produces one. `bindEpochMillis` reads its
   `i64` with std's `String.parseInt` over the trimmed text (front 97), so a
   numeral beyond ±(2^53 − 1) is a `typeMismatch` on both targets.
+
+## Local gate
+
+`scripts/git-hooks/pre-commit` is the tracked pre-commit gate, self-contained:
+it sources `scripts/git-hooks/lib/runner-standalone.sh` from this repository and
+reaches nothing outside it, so a standalone clone, a checkout inside the botopink
+meta workspace and a worktree run the same gate. Install it once per clone:
+
+```sh
+git config core.hooksPath scripts/git-hooks
+```
+
+The repository is one plain package, so the gate's test stage runs
+`botopink test --target <t>` at the root on each target `botopink.json` declares
+(`erlang`, `commonJS`). Never commit with `--no-verify`; fix the red instead.
+`scripts/git-hooks/pre-commit` and `scripts/git-hooks/lib/runner-standalone.sh`
+are one text across every library repository: the meta repository's
+`hook-integrity` workflow compares the bytes (its check 4), so a change to either
+lands in all of them together. CI: `.github/workflows/test.yml` runs the same
+package on linux and macos, on each declared target, with the compiler built from
+`botopink/botopink-lang` `feat`.

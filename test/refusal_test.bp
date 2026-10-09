@@ -7,7 +7,7 @@
 //// location (decision 67 — a refusal is located, never a warning).
 
 import {decorators.markerNames};
-import {io.fs, io.process, io.env, path} from "std";
+import {io.fs, io.process, io.env, path, json} from "std";
 
 // The run's own scratch directory — `botopink test` names it, and it is the
 // one place a test writes.
@@ -18,17 +18,44 @@ fn testTmp() -> string {
 }
 
 // The compiler the fixtures are checked with: `BOTOPINK_BIN` when the caller
-// names one, else the enclosing checkout's `zig-out/bin/botopink` — this
-// package sits at `libs/validation` of it.
+// names one, else the meta checkout's compiler — this package sits at
+// `repository/validation`, beside `repository/botopink-lang` — else the
+// compiler of a CI checkout that placed it at `botopink-lang/repository/validation`.
 fn botopinkBin() -> string {
     val named = env.read("BOTOPINK_BIN") ?? "";
     if (named != "" && fs.exists(named)) return named;
+    val sibling = path.normalize(
+        path.join(
+            [
+                process.cwd(),
+                "..",
+                "botopink-lang",
+                "zig-out",
+                "bin",
+                "botopink",
+            ],
+        ),
+    );
+    if (fs.exists(sibling)) return sibling;
     return path.normalize(
         path.join([process.cwd(), "..", "..", "zig-out", "bin", "botopink"]),
     );
 }
 
-val MANIFEST = """{ "name": "fixture", "version": "0.0.1", "src": "src/", "entry": "main.bp", "target": "erlang", "files": ["main.bp"] }""";
+// A fixture's manifest: its `files`, and `validation` — this package's own
+// directory — declared in `dependencies`, as any program that imports it must
+// (decision 242).
+fn fixtureManifest(files: string) -> string {
+    return [
+        """{ "name": "fixture", "version": "0.0.1", "src": "src/", "entry": "main.bp", "target": "erlang", "files": [""",
+        files,
+        """], "dependencies": { "validation": { "path": """,
+        json.quote(process.cwd()),
+        " } } }",
+    ].join("");
+}
+
+val MAIN_ONLY = "\"main.bp\"";
 
 // `botopink check` over a project whose `src/main.bp` is `source`: its status
 // and its output, stdout and stderr together, as `<status>\n<output>`.
@@ -36,7 +63,10 @@ fn checked(name: string, source: string) -> string {
     val dir = path.join([testTmp(), "refusal", name]);
     val made = process.run("mkdir", ["-p", path.join([dir, "src"])]);
     assert made.isOk();
-    val m = fs.writeText(path.join([dir, "botopink.json"]), MANIFEST);
+    val m = fs.writeText(
+        path.join([dir, "botopink.json"]),
+        fixtureManifest(MAIN_ONLY),
+    );
     assert m.isOk();
     val s = fs.writeText(path.join([dir, "src", "main.bp"]), source);
     assert s.isOk();
@@ -214,11 +244,7 @@ fn checkedMarkers(
         k = k + 1;
     }
     val files = names.map({ n -> ["\"", n, ".bp\""].join("") });
-    val manifest = [
-        """{ "name": "fixture", "version": "0.0.1", "src": "src/", "entry": "main.bp", "target": "erlang", "files": [""",
-        files.join(", "),
-        """, "main.bp"] }""",
-    ].join("");
+    val manifest = fixtureManifest([files.join(", "), MAIN_ONLY].join(", "));
     val m = fs.writeText(path.join([dir, "botopink.json"]), manifest);
     assert m.isOk();
     val main = names.map({ n -> ["pub mod ", n, ";"].join("") }).join("\n");
