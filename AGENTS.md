@@ -178,10 +178,12 @@ field held to a closed set, the options comma-joined in one argument).
   `?i64` or `?f64` checks the value when it is present and nothing when it is
   null (`if (v.f != null) …`); on any other optional type it is refused.
 - **Numeric bounds.** The bound of `gt` / `lt` / `multipleOf` is the field's
-  type: a fraction on an integer field is refused; on an `f64` field `5` is
-  emitted as `5.0`, and the message shows the bound as written (a whole `f64`
+  type — `fn gt<T>(comptime decl: @Decl<T>, comptime value: T)` (decision 280
+  (2)): the checker refuses at the argument a fraction on an integer field and
+  a whole literal on an `f64` field (`#[gt(5)]` is written `#[gt(5.0)]`,
+  decision 247); the message shows the bound as written (a whole `f64`
   renders `2.0` on erlang and `2` on node). `minValue` / `maxValue` on `f64`
-  take the same widening.
+  take an integer bound widened.
 - **Messages.** A parameter is never named `value` (the field's value is
   `{value}` in every template): `gt` / `lt` say `{bound}`, `multipleOf`
   `{step}`.

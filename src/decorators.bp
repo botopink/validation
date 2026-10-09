@@ -74,7 +74,7 @@ pub val transparent: Form = Form.Transparent;
 // …` does not parse), so `form` is a run-time parameter — decision 280 (0)
 // writes every decorator parameter `comptime`; the body reads the argument's
 // lexeme (`transparent`) from `decl.annotations`.
-pub fn validated(comptime decl: @Decl, form: ?Form = null) {
+pub fn validated(comptime decl: @Decl, comptime form: ?Form = null) {
     var calls: Array<string> = [];
     var rows: Array<string> = [];
     var problem = "";
@@ -413,7 +413,7 @@ pub fn notEmpty(comptime decl: @Decl) {
         decl.fail("#[notEmpty] must annotate a field");
 }
 
-pub fn sizeBetween(comptime decl: @Decl, min: i32, max: i32) {
+pub fn sizeBetween(comptime decl: @Decl, comptime min: i32, comptime max: i32) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[sizeBetween] must annotate a field");
     if (min < 0)
@@ -424,12 +424,12 @@ pub fn sizeBetween(comptime decl: @Decl, min: i32, max: i32) {
         );
 }
 
-pub fn minValue(comptime decl: @Decl, min: i32) {
+pub fn minValue(comptime decl: @Decl, comptime min: i32) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[minValue] must annotate a field");
 }
 
-pub fn maxValue(comptime decl: @Decl, max: i32) {
+pub fn maxValue(comptime decl: @Decl, comptime max: i32) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[maxValue] must annotate a field");
 }
@@ -453,7 +453,7 @@ pub fn email(comptime decl: @Decl) {
 // table's blob separates records with `;` and fields with `|`. A pattern
 // carrying either would make the table unreadable, so it is refused here
 // rather than escaped there — the grammar has no escape and needs none.
-pub fn pattern(comptime decl: @Decl, regex: string) {
+pub fn pattern(comptime decl: @Decl, comptime regex: string) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[pattern] must annotate a field");
     if (regex == "") decl.fail("#[pattern]: the pattern may not be empty");
@@ -482,7 +482,7 @@ pub fn futureDate(comptime decl: @Decl) {
 // load, and a decorator body has no whole-program view — so an unregistered
 // name is a violation at the first validation call, coded `unknownConstraint`,
 // and never a pass.
-pub fn constraint(comptime decl: @Decl, name: string) {
+pub fn constraint(comptime decl: @Decl, comptime name: string) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[constraint] must annotate a field");
     if (name == "") decl.fail("#[constraint]: the name may not be empty");
@@ -1051,14 +1051,14 @@ pub fn isoDuration(comptime decl: @Decl) {
         decl.fail("#[isoDuration] must annotate a field");
 }
 
-// The bound's type is the field's: an `i32` or `i64` field takes a whole
-// number, an `f64` field any number (`#[validated]` refuses a fraction on an
-// integer field).
-pub fn gt(comptime decl: @Decl, comptime value: f64) {
+// The bound's type is the field's (`@Decl<T>`, decision 280): an `i32` or
+// `i64` field takes a whole number, an `f64` field any number — a fraction on
+// an integer field is refused at the argument.
+pub fn gt<T>(comptime decl: @Decl<T>, comptime value: T) {
     if (decl.kind != DeclKind.Field) decl.fail("#[gt] must annotate a field");
 }
 
-pub fn lt(comptime decl: @Decl, comptime value: f64) {
+pub fn lt<T>(comptime decl: @Decl<T>, comptime value: T) {
     if (decl.kind != DeclKind.Field) decl.fail("#[lt] must annotate a field");
 }
 
@@ -1072,11 +1072,10 @@ pub fn negativeOrZero(comptime decl: @Decl) {
         decl.fail("#[negativeOrZero] must annotate a field");
 }
 
-pub fn multipleOf(comptime decl: @Decl, comptime value: f64) {
+pub fn multipleOf<T>(comptime decl: @Decl<T>, comptime value: T) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[multipleOf] must annotate a field");
-    if (value <= 0.0)
-        decl.fail("#[multipleOf]: the step must be greater than 0");
+    if (value <= 0) decl.fail("#[multipleOf]: the step must be greater than 0");
 }
 
 pub fn safeInt(comptime decl: @Decl) {

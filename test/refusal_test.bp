@@ -196,8 +196,8 @@ pub type Bad(
     );
     assert refusedWith(
         out,
-        "#[orElse] on field `food` of `Bad`: the literal `7` is not a `string`",
-        "7:3",
+        "type mismatch: `#[orElse]`'s `value` expects `string`, got `i32`",
+        "9:14",
     );
 }
 
@@ -494,11 +494,11 @@ fn markerRows() -> Array<#(string, string, string)> {
         #("isoDatetimeLocal", "", "i32"),
         #("isoDatetimePrecision", "(3)", "i32"),
         #("isoDuration", "", "i32"),
-        #("gt", "(1)", "string"),
-        #("lt", "(1)", "string"),
+        #("gt", "(\"1\")", "string"),
+        #("lt", "(\"1\")", "string"),
         #("negative", "", "string"),
         #("negativeOrZero", "", "string"),
-        #("multipleOf", "(5)", "string"),
+        #("multipleOf", "(\"5\")", "string"),
         #("safeInt", "", "i32"),
         #("float32", "", "i32"),
         #("afterIso", "(\"2020-01-01T00:00:00Z\")", "i32"),
@@ -627,14 +627,14 @@ fn argumentMessages() -> Array<string> {
         "#[hashEnc]: the encoding is one of hex, base64, base64url",
         "#[isoTimePrecision]: the precision is -1 (minutes), 0 (seconds) or 1 to 9 fraction digits",
         "#[isoDatetimePrecision] on field `x` of `Bad`: it fixes the precision only",
-        "#[gt] on field `x` of `Bad`: the bound `0.5` is not a whole number",
+        "type mismatch: `#[gt]`'s `value` expects `i32`, got `f64`",
         "#[multipleOf]: the step must be greater than 0",
         "#[multipleOf] on field `x` of `Bad`: write the step as a decimal",
         "#[afterIso]: the bound is an ISO datetime with its zone",
         "#[minLength] on field `x` of `Bad`: a marker on an optional field applies to",
         "#[oneOf]: one option is a #[literal]",
         "#[oneOf]: an option may not be empty",
-        "#[literal] on field `x` of `Bad`: the literal `1.5` is not an `i32`",
+        "type mismatch: `#[literal]`'s `expected` expects `string | i32 | bool`, got `f64`",
     ];
 }
 
