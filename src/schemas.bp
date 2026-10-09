@@ -332,7 +332,7 @@ pub fn decodeArrayOf<T>(
     var found: Array<Violation> = [];
     var i = 0;
     while (i < items.length) {
-        val r = item(items.at(i).unwrapOr(Json.Null), index(at, i));
+        val r = item(items.at(i) ?? Json.Null, index(at, i));
         found = found.append(violationsOf(r));
         out = case r {
             Ok(v) -> out.append([v]);

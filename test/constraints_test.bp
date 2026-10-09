@@ -180,8 +180,8 @@ test "validation: every constraint on a field runs, in declaration order" {
     assert r.isValid() == false;
     assert codesOf(r.violations)
         == "notBlank,sizeBetween,email,minValue,pattern";
-    assert r.violations.at(0).map({ v -> v.field }).unwrapOr("") == "name";
-    assert r.violations.at(1).map({ v -> v.field }).unwrapOr("") == "name";
+    assert r.violations.at(0)?.field ?? "" == "name";
+    assert r.violations.at(1)?.field ?? "" == "name";
 }
 
 test "validation: a field with no constraint contributes nothing" {

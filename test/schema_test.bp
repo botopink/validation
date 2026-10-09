@@ -262,7 +262,7 @@ test "validation: a type that names itself decodes to any depth" {
               {"name": "b", "subcategories": []}]}""",
     );
     assert tree.subcategories.length == 2;
-    val first = tree.subcategories.at(0).unwrapOr(tree);
+    val first = tree.subcategories.at(0) ?? tree;
     assert first.name == "a";
     assert first.subcategories.length == 1;
 }
@@ -271,7 +271,7 @@ fn depthOf(c: Category) -> i32 {
     var depth = 1;
     var at = c;
     while (at.subcategories.length > 0) {
-        at = at.subcategories.at(0).unwrapOr(at);
+        at = at.subcategories.at(0) ?? at;
         depth = depth + 1;
     }
     return depth;

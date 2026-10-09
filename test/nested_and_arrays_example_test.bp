@@ -93,5 +93,5 @@ test "validation: a recursive type decodes to any depth" {
               {"name": "b", "subcategories": []}]}""",
     );
     assert tree.subcategories.length == 2;
-    assert tree.subcategories.at(0).unwrapOr(tree).subcategories.length == 1;
+    assert (tree.subcategories.at(0) ?? tree).subcategories.length == 1;
 }

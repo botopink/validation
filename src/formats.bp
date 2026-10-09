@@ -144,7 +144,7 @@ pub fn isNanoid(s: string) -> bool {
 pub fn isCuid(s: string) -> bool {
     val cs = chars(s);
     if (cs.length < 9) return false;
-    if (inSet(cs.at(0).unwrapOr(""), "cC") == false) return false;
+    if (inSet(cs.at(0) ?? "", "cC") == false) return false;
     val tail = cs.slice(1, cs.length);
     return tail.filter({ c ->
         c.length() != 1 || c == "-" || isPrintableAscii(c) == false || c == " ";
@@ -224,7 +224,7 @@ fn padded(segment: string) -> string {
 
 // The decoded header of a token, `Json.Null` when it is not a JSON object.
 fn jwtHeader(token: string) -> Json {
-    val head = parts(token, ".").at(0).unwrapOr("");
+    val head = parts(token, ".").at(0) ?? "";
     val standard = padded(head).replaceAll("-", "+").replaceAll("_", "/");
     val text = try encoding.base64Decode(standard) catch "";
     if (text == "") return Json.Null;
@@ -256,7 +256,7 @@ fn member(doc: Json, name: string) -> #(bool, string) {
     var text = "";
     var i = 0;
     while (i < ms.length) {
-        val m = ms.at(i).unwrapOr(#("", Json.Null));
+        val m = ms.at(i) ?? #("", Json.Null);
         if (found == false && m._0 == name) {
             found = true;
             text = textOf(m._1);
@@ -275,8 +275,7 @@ pub fn isJwt(token: string) -> bool {
     if (segs.length != 3) return false;
     val ok = segs.filter({ g -> isBase64Url(g) }).length == 3;
     if (ok == false) return false;
-    if (segs.at(0).unwrapOr("") == "" || segs.at(1).unwrapOr("") == "")
-        return false;
+    if (segs.at(0) ?? "" == "" || (segs.at(1) ?? "") == "") return false;
     val header = jwtHeader(token);
     if (isObject(header) == false) return false;
     if (member(header, "alg")._1 == "") return false;
@@ -360,7 +359,7 @@ fn ipv6Groups(side: string, tail: bool) -> i32 {
     var bad = false;
     var i = 0;
     while (i < gs.length) {
-        val g = gs.at(i).unwrapOr("");
+        val g = gs.at(i) ?? "";
         val last = i == gs.length - 1;
         if (last && tail && g.indexOf(".") >= 0) {
             if (isIpv4(g)) count = count + 2 else bad = true;
@@ -378,8 +377,8 @@ pub fn isIpv6(s: string) -> bool {
     val halves = s.split("::");
     if (halves.length > 2) return false;
     if (halves.length == 2) {
-        val left = halves.at(0).unwrapOr("");
-        val right = halves.at(1).unwrapOr("");
+        val left = halves.at(0) ?? "";
+        val right = halves.at(1) ?? "";
         val l = ipv6Groups(left, false);
         val r = ipv6Groups(right, true);
         if (l < 0 || r < 0) return false;
@@ -397,14 +396,13 @@ fn isPrefix(p: string, max: i32) -> bool {
 pub fn isCidrv4(s: string) -> bool {
     val ps = parts(s, "/");
     if (ps.length != 2) return false;
-    return isIpv4(ps.at(0).unwrapOr("")) && isPrefix(ps.at(1).unwrapOr(""), 32);
+    return isIpv4(ps.at(0) ?? "") && isPrefix(ps.at(1) ?? "", 32);
 }
 
 pub fn isCidrv6(s: string) -> bool {
     val ps = parts(s, "/");
     if (ps.length != 2) return false;
-    return isIpv6(ps.at(0).unwrapOr(""))
-        && isPrefix(ps.at(1).unwrapOr(""), 128);
+    return isIpv6(ps.at(0) ?? "") && isPrefix(ps.at(1) ?? "", 128);
 }
 
 fn isLabel(l: string) -> bool {
@@ -427,7 +425,7 @@ pub fn isHostname(s: string) -> bool {
 pub fn isDomain(s: string) -> bool {
     if (isHostname(s) == false || s.endsWith(".")) return false;
     val labels = parts(s, ".");
-    val top = labels.at(labels.length - 1).unwrapOr("");
+    val top = labels.at(labels.length - 1) ?? "";
     return labels.length >= 2
         && top.length() >= 2
         && allIn(top, [lowerChars(), upperChars()].join(""));
@@ -450,8 +448,7 @@ fn isPrintableAscii(c: string) -> bool {
 fn isScheme(s: string) -> bool {
     val cs = chars(s);
     if (cs.length == 0) return false;
-    if (inSet(cs.at(0).unwrapOr(""), [lowerChars(), upperChars()].join(""))
-        == false)
+    if (inSet(cs.at(0) ?? "", [lowerChars(), upperChars()].join("")) == false)
         return false;
     return allIn(s, [alnumChars(), "+.-"].join(""));
 }
@@ -471,35 +468,35 @@ pub fn urlParts(s: string) -> UrlParts {
         return noUrl();
     val split = s.split("://");
     if (split.length < 2) return noUrl();
-    val scheme = split.at(0).unwrapOr("");
+    val scheme = split.at(0) ?? "";
     if (isScheme(scheme) == false) return noUrl();
     val rest = split.slice(1, split.length).join("://");
     val ends = chars(rest);
     var stop = ends.length;
     var i = 0;
     while (i < ends.length && stop == ends.length) {
-        val c = ends.at(i).unwrapOr("");
+        val c = ends.at(i) ?? "";
         if (c == "/" || c == "?" || c == "#") stop = i;
         i = i + 1;
     }
     val authority = rest.slice(0, stop);
     val at = authority.split("@");
-    val hostport = at.at(at.length - 1).unwrapOr("");
+    val hostport = at.at(at.length - 1) ?? "";
     var host = "";
     var port = "";
     if (hostport.startsWith("[")) {
         val close = hostport.split("]");
         if (close.length != 2) return noUrl();
-        host = [close.at(0).unwrapOr(""), "]"].join("");
-        val after = close.at(1).unwrapOr("");
+        host = [close.at(0) ?? "", "]"].join("");
+        val after = close.at(1) ?? "";
         if (after != "" && after.startsWith(":") == false) return noUrl();
         port = if (after == "") "" else after.slice(1, after.length());
         if (isIpv6(host.slice(1, host.length() - 1)) == false) return noUrl();
     } else {
         val hp = parts(hostport, ":");
         if (hp.length > 2) return noUrl();
-        host = hp.at(0).unwrapOr("");
-        port = hp.at(1).unwrapOr("");
+        host = hp.at(0) ?? "";
+        port = hp.at(1) ?? "";
         if (isIpv4(host) == false && isHostname(host) == false) return noUrl();
     }
     if (isPort(port) == false) return noUrl();
@@ -548,7 +545,7 @@ fn isRfcAtom(a: string) -> bool {
 pub fn isEmailRfc5322(s: string) -> bool {
     val at = s.split("@");
     if (at.length < 2) return false;
-    val domain = at.at(at.length - 1).unwrapOr("");
+    val domain = at.at(at.length - 1) ?? "";
     val local = at.slice(0, at.length - 1).join("@");
     val quoted = local.length() >= 3
         && local.startsWith("\"")
@@ -564,7 +561,7 @@ pub fn isEmailRfc5322(s: string) -> bool {
         return isIpv4(domain.slice(1, domain.length() - 1));
     val labels = parts(domain, ".");
     if (labels.length < 2) return false;
-    val top = labels.at(labels.length - 1).unwrapOr("");
+    val top = labels.at(labels.length - 1) ?? "";
     return labels.filter(
         { l -> l == "" || allIn(l, [alnumChars(), "-"].join("")) == false },
     ).length
@@ -710,7 +707,7 @@ pub fn isCreditCard(s: string) -> bool {
     var sum = 0;
     var i = 0;
     while (i < n) {
-        val d = ds.at(n - 1 - i).unwrapOr(0);
+        val d = ds.at(n - 1 - i) ?? 0;
         val doubled = if (i % 2 == 1) d * 2 else d;
         val folded = if (doubled > 9) doubled - 9 else doubled;
         sum = sum + folded;
@@ -733,7 +730,7 @@ pub fn isIban(s: string) -> bool {
     var rem = 0;
     var i = 0;
     while (i < moved.length) {
-        val c = moved.at(i).unwrapOr("");
+        val c = moved.at(i) ?? "";
         val d = digitChars().indexOf(c);
         if (d >= 0)
             rem = (rem * 10 + d) % 97
@@ -772,9 +769,9 @@ fn daysInMonth(y: i32, m: i32) -> i32 {
 pub fn isIsoDate(s: string) -> bool {
     val ps = parts(s, "-");
     if (ps.length != 3) return false;
-    val y = ps.at(0).unwrapOr("");
-    val m = ps.at(1).unwrapOr("");
-    val d = ps.at(2).unwrapOr("");
+    val y = ps.at(0) ?? "";
+    val m = ps.at(1) ?? "";
+    val d = ps.at(2) ?? "";
     if (y.length() != 4 || m.length() != 2 || d.length() != 2) return false;
     val year = digitsValue(y);
     val month = digitsValue(m);
@@ -793,13 +790,13 @@ fn isTwo(s: string, max: i32) -> bool {
 pub fn isIsoTimeWith(s: string, precision: i32) -> bool {
     val dot = s.split(".");
     if (dot.length > 2) return false;
-    val clock = parts(dot.at(0).unwrapOr(""), ":");
-    val fraction = dot.at(1).unwrapOr("");
+    val clock = parts(dot.at(0) ?? "", ":");
+    val fraction = dot.at(1) ?? "";
     val hasFraction = dot.length == 2;
     if (clock.length < 2 || clock.length > 3) return false;
-    if (isTwo(clock.at(0).unwrapOr(""), 23) == false) return false;
-    if (isTwo(clock.at(1).unwrapOr(""), 59) == false) return false;
-    if (clock.length == 3 && isTwo(clock.at(2).unwrapOr(""), 59) == false)
+    if (isTwo(clock.at(0) ?? "", 23) == false) return false;
+    if (isTwo(clock.at(1) ?? "", 59) == false) return false;
+    if (clock.length == 3 && isTwo(clock.at(2) ?? "", 59) == false)
         return false;
     if (hasFraction && (clock.length != 3 || isDigits(fraction) == false))
         return false;
@@ -838,8 +835,8 @@ fn zoneOf(rest: string) -> #(string, string) {
 pub fn isIsoDatetimeWith(s: string, zones: string, precision: i32) -> bool {
     val ps = s.split("T");
     if (ps.length != 2) return false;
-    if (isIsoDate(ps.at(0).unwrapOr("")) == false) return false;
-    val z = zoneOf(ps.at(1).unwrapOr(""));
+    if (isIsoDate(ps.at(0) ?? "") == false) return false;
+    val z = zoneOf(ps.at(1) ?? "");
     val accepted = parts(zones, ",");
     if (accepted.indexOf(z._1) < 0) return false;
     return isIsoTimeWith(z._0, precision);
@@ -874,7 +871,7 @@ fn durationUnits(s: string, order: string, lastMayFraction: bool) -> string {
     val cs = chars(s);
     var i = 0;
     while (i < cs.length) {
-        val c = cs.at(i).unwrapOr("");
+        val c = cs.at(i) ?? "";
         if (inSet(c, digitChars())
             || ((c == "." || c == ",") && lastMayFraction))
             digits = [digits, c].join("")
@@ -888,8 +885,8 @@ fn durationUnits(s: string, order: string, lastMayFraction: bool) -> string {
                 else
                     digits.split(",");
                 val ok = ds.length == 2
-                    && isDigits(ds.at(0).unwrapOr(""))
-                    && isDigits(ds.at(1).unwrapOr(""))
+                    && isDigits(ds.at(0) ?? "")
+                    && isDigits(ds.at(1) ?? "")
                     && c == "S";
                 if (ok == false) bad = true;
             } else if (isDigits(digits) == false) bad = true;
@@ -915,9 +912,9 @@ pub fn isIsoDuration(s: string) -> bool {
         return durationUnits(body, "W", false) == "W";
     val halves = body.split("T");
     if (halves.length > 2) return false;
-    val date = durationUnits(halves.at(0).unwrapOr(""), "YMD", false);
+    val date = durationUnits(halves.at(0) ?? "", "YMD", false);
     if (date == "?") return false;
     if (halves.length == 1) return date != "";
-    val time = durationUnits(halves.at(1).unwrapOr(""), "HMS", true);
+    val time = durationUnits(halves.at(1) ?? "", "HMS", true);
     return time != "?" && time != "";
 }

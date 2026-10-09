@@ -96,9 +96,7 @@ fn digest() -> string {
     val all = inputs();
     while (i < all.length) {
         val one = all.at(i);
-        val rep = one
-            .map({ v -> v.validate() })
-            .unwrapOr(ValidationReport.empty());
+        val rep = one?.validate() ?? ValidationReport.empty();
         out.push(digestOne(i, rep));
         i = i + 1;
     }

@@ -91,7 +91,7 @@ fn digest() -> string {
     var i = 0;
     val all = documents();
     while (i < all.length) {
-        out.push(digestOne(i, decodeEntry(all.at(i).unwrapOr(""))));
+        out.push(digestOne(i, decodeEntry(all.at(i) ?? "")));
         i = i + 1;
     }
     return out.join(";\n");

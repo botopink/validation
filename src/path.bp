@@ -59,8 +59,8 @@ pub fn segments(field: string) -> Array<string> {
     var escaped = false;
     var i = 0;
     while (i < chars.length) {
-        val c = chars.at(i).unwrapOr("");
-        val next = chars.at(i + 1).unwrapOr("");
+        val c = chars.at(i) ?? "";
+        val next = chars.at(i + 1) ?? "";
         if (quotedKey) {
             if (escaped) {
                 current = current + c;
@@ -89,5 +89,5 @@ pub fn segments(field: string) -> Array<string> {
 // The first part of a path — the field of the outermost record — or `` for the
 // root. What a form uses to put a message beside its input.
 pub fn head(field: string) -> string {
-    return segments(field).at(0).unwrapOr("");
+    return segments(field).at(0) ?? "";
 }

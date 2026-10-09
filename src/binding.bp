@@ -104,14 +104,14 @@ pub fn digits() -> string {
 pub fn isIntegerText(raw: string) -> bool {
     val t = raw.trim();
     if (t == "") return false;
-    val head = t.at(0).unwrapOr("");
+    val head = t.at(0) ?? "";
     val signed = head == "-" || head == "+";
     val start = if (signed) 1 else 0;
     if (t.length() <= start) return false;
     var i = start;
     var ok = true;
     while (i < t.length()) {
-        if (digits().indexOf(t.at(i).unwrapOr("")) < 0) ok = false;
+        if (digits().indexOf(t.at(i) ?? "") < 0) ok = false;
         i = i + 1;
     }
     return ok;
@@ -123,12 +123,12 @@ pub fn isIntegerText(raw: string) -> bool {
 // self-recursive `String.prototype.charCodeAt` patch that kills the module.
 pub fn parseI32(raw: string) -> i32 {
     val t = raw.trim();
-    val head = t.at(0).unwrapOr("");
+    val head = t.at(0) ?? "";
     val negative = head == "-";
     var i = if (negative || head == "+") 1 else 0;
     var n = 0;
     while (i < t.length()) {
-        n = n * 10 + digits().indexOf(t.at(i).unwrapOr(""));
+        n = n * 10 + digits().indexOf(t.at(i) ?? "");
         i = i + 1;
     }
     if (negative) return 0 - n else return n;

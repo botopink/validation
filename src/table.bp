@@ -87,13 +87,13 @@ pub fn renderParam(name: string, value: string) -> string {
 }
 
 pub fn constraintJson(parts: string[]) -> string {
-    val code = parts.at(1).unwrapOr("");
+    val code = parts.at(1) ?? "";
     val names = paramNames(code);
     var members: Array<#(string, string)> = [#("code", json.quote(code))];
     var j = 0;
     while (j < names.length) {
-        val nm = names.at(j).unwrapOr("");
-        val pv = parts.at(j + 2).unwrapOr("");
+        val nm = names.at(j) ?? "";
+        val pv = parts.at(j + 2) ?? "";
         members.push(#(nm, renderParam(nm, pv)));
         j = j + 1;
     }
@@ -121,8 +121,8 @@ pub fn constraintTableJson(typeName: string, blob: string) -> string {
     var cons = "";
     var i = 0;
     while (i < recs.length) {
-        val parts = recs.at(i).unwrapOr("").split("|");
-        val fname = parts.at(0).unwrapOr("");
+        val parts = (recs.at(i) ?? "").split("|");
+        val fname = parts.at(0) ?? "";
         if (fname != current) {
             if (current != "") fields = fields + fieldJson(current, cons) + ",";
             current = fname;
