@@ -9,14 +9,15 @@
 //// this one file. A decoder that answered differently on one of them would red
 //// its own half here; `parity_test.bp` holds the two to one digest besides.
 
-import {decorators.schema, decorators.validated, decorators.notBlank, decorators.minValue};
-import {constraints.vNotBlank, constraints.vMinValueI32};
+import {decorators.schema, decorators.validated, decorators.notBlank, decorators.minValue, decorators.maxValue};
+import {decorators.orElse, decorators.orElseOf, decorators.fallback, decorators.fallbackOf, decorators.present, decorators.rest};
+import {constraints.vNotBlank, constraints.vMinValueI32, constraints.vMaxValueI32};
 import {table.constraintTableJson};
 import {schemas};
 import {schemas.Schema};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
-import {json, json.Json, collections.Set} from "std";
+import {json, json.Json, collections.Set, collections.Dict} from "std";
 
 #[schema]
 pub type Signup(
@@ -493,4 +494,87 @@ test "validation: an absent union is required" {
             .join(",");
     };
     assert text == "id:required";
+}
+
+// ── step 5: object policy ───────────────────────────────────────────────────
+
+fn defaultCity() -> string {
+    return "Recife";
+}
+
+fn noScore() -> i64 {
+    return schemas.widened(-1.0);
+}
+
+#[schema]
+#[validated]
+pub type Settings(
+    #[orElseOf("defaultCity")] city: string,
+    #[orElse(3)] retries: i32,
+    #[orElse(2.5)] ratio: f64,
+    #[orElse(true)] on: bool,
+    #[orElse(10)] big: i64,
+    #[fallback(1)] #[minValue(1)] #[maxValue(9)] level: i32,
+    #[fallbackOf("noScore")] score: i64,
+)
+
+fn codesOf<T>(r: @Result<T, ValidationReport>) -> string {
+    return schemas
+        .violationsOf(r)
+        .map({ v -> v.field + ":" + v.code })
+        .join(",");
+}
+
+test "validation: absent keys take their defaults, literal or called" {
+    val doc = try json.decode("""{"level": 5, "score": 7}""") catch Json.Null;
+    val s = try parseSettings(doc);
+    assert s.city == "Recife";
+    assert s.retries == 3;
+    assert s.ratio == 2.5;
+    assert s.on;
+    assert [s.big].join("") == "10";
+    assert s.level == 5;
+}
+
+test "validation: a fallback answers a value that does not decode and one that fails its checks" {
+    val wrong = try json.decode(
+        """{"level": "high", "score": "x"}""",
+    ) catch Json.Null;
+    val s = try parseSettings(wrong);
+    assert s.level == 1;
+    assert [s.score].join("") == "-1";
+    val outOfRange = try json.decode(
+        """{"level": 12, "score": 1}""",
+    ) catch Json.Null;
+    val t = try parseSettings(outOfRange);
+    assert t.level == 1;
+}
+
+test "validation: #[present] refuses an explicit null as invalidType at the key" {
+    val doc = try json.decode(
+        """{"middle": null, "lucky": 1}""",
+    ) catch Json.Null;
+    assert codesOf(parseProfileHere(doc)) == "middle:invalidType";
+}
+
+#[schema]
+pub type ProfileHere(
+    #[present] middle: ?string,
+    lucky: i32,
+)
+
+#[schema]
+pub type Envelope(
+    kind: string,
+    #[rest] fields: Dict<string, i32>,
+)
+
+test "validation: a #[rest] member is decoded at its own key" {
+    val doc = try json.decode(
+        """{"kind": "a", "x": 1, "y": "two"}""",
+    ) catch Json.Null;
+    assert codesOf(parseEnvelope(doc)) == "y:invalidType";
+    val ok = try json.decode("""{"kind": "a", "x": 1}""") catch Json.Null;
+    val e = try parseEnvelope(ok);
+    assert e.fields.keys().join(",") == "x";
 }

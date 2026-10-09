@@ -174,6 +174,94 @@ pub type Bad(name: string)
     );
 }
 
+// ── step 5: object policy ───────────────────────────────────────────────────
+
+val POLICY_IMPORTS = """import {decorators.orElse, decorators.present, decorators.rest, decorators.stripUnknown} from "validation";
+import {collections.Dict} from "std";
+""";
+
+test "validation: #[orElse] with a literal that is not the field's type is refused" {
+    val out = checked(
+        "schema_or_else_mismatch",
+        [
+            SCHEMA_IMPORTS,
+            POLICY_IMPORTS,
+            """
+#[schema]
+pub type Bad(
+    #[orElse(7)] food: string,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[orElse] on field `food` of `Bad`: the literal `7` is not a `string`",
+        "7:3",
+    );
+}
+
+test "validation: #[present] on a field that is not optional is refused" {
+    val out = checked(
+        "schema_present_required",
+        [
+            SCHEMA_IMPORTS,
+            POLICY_IMPORTS,
+            """
+#[schema]
+pub type Bad(
+    #[present] middle: string,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[schema] on field `middle` of `Bad`: #[present] says the key may be left out, so the field is `?T`, and this one is `string`",
+        "7:3",
+    );
+}
+
+test "validation: #[rest] on a field that is not Dict<string, T> is refused, and so is a second one" {
+    val wrongType = checked(
+        "schema_rest_type",
+        [
+            SCHEMA_IMPORTS,
+            POLICY_IMPORTS,
+            """
+#[schema]
+pub type Bad(
+    #[rest] extra: Array<string>,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        wrongType,
+        "#[rest] holds the members the type does not declare, so the field is `Dict<string, T>`, and this one is `Array<string>`",
+        "7:3",
+    );
+    val two = checked(
+        "schema_rest_twice",
+        [
+            SCHEMA_IMPORTS,
+            POLICY_IMPORTS,
+            """
+#[schema]
+#[stripUnknown]
+pub type Bad(
+    #[rest] a: Dict<string, i32>,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        two,
+        "#[stripUnknown] on `Bad`: a #[rest] field keeps the undeclared members, so they cannot also be dropped",
+        "7:3",
+    );
+}
+
 // ── every marker on a field type it cannot check ────────────────────────────
 //
 // One row per marker of `decorators.markerNames()`: the marker, its arguments

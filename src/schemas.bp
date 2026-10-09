@@ -600,3 +600,42 @@ pub fn decodeIntKey(input: Json, at: string) -> @Result<i32, ValidationReport> {
 pub fn without(input: Json, name: string) -> Json {
     return Json.Obj(input.members().filter({ m -> m[0] != name }));
 }
+
+// ── step 5: object policy ───────────────────────────────────────────────────
+
+// `#[present]` on a `?T` field (Zod's `.exactOptional()`): the key may be left
+// out — `null` — but a key that is there and holds `null` is `invalidType`.
+pub fn presentOf<T>(
+    input: Json,
+    name: string,
+    at: string,
+    inner: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
+) -> @Result<?T, ValidationReport> {
+    val where = key(at, name);
+    val keys = input.members().map({ m -> m[0] });
+    if (keys.indexOf(name) < 0) return absent();
+    val value = input.field(name) ?? Json.Null;
+    if (isNull(value))
+        throw wrongType(where, "a value, or no key at all", value);
+    val v = try inner(value, where);
+    return present(v);
+}
+
+// The members of `input` that `known` does not name, in document order — what
+// a `#[rest]` field holds.
+pub fn restOf(input: Json, known: Array<string>) -> Json {
+    if (kindOf(input) != "an object") return Json.Obj([]);
+    return Json.Obj(input.members().filter({ m -> known.indexOf(m[0]) < 0 }));
+}
+
+// An `i64` from a whole `f64` literal — the emitted default of an `i64` field
+// (an integer literal does not widen to `i64`).
+pub fn widened(n: f64) -> i64 {
+    return wholeI64(n);
+}
+
+// The fields a report names, the paths' first segments under `at` removed —
+// which of a record's `#[fallback]` fields failed their checks.
+pub fn failedFields(report: ValidationReport) -> Array<string> {
+    return report.violations.map({ v -> v.field });
+}

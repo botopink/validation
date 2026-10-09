@@ -46,7 +46,8 @@ validation/
 │   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
 │   │                   `#[schema]` calls: memberPath, indexPath, objectProblems, unknownKeys,
 │   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
-│   │                   itemOf, absentKeys, without; kindOf, isNull, shown
+│   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields;
+│   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
 │   │                   clearConstraints, unknownConstraintMessage, vConstraint   (registry: templates)
@@ -56,9 +57,11 @@ validation/
 │   ├── binding.bp      bindInt, bindBool, bindRequired, bindEpochMillis, bindingReport, bindingCount,
 │   │                   bindingReset, bindingIsolated, isIntegerText, parseI32   (accumulator: templates)
 │   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
-│                       #[tag], #[exhaustive]
+│                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
+│                       #[orElseOf], #[fallback], #[fallbackOf]
 └── test/             binding · checks_and_formats_example · collections_example · constraints ·
-                      enums_and_unions_example · messages · nested_and_arrays_example · parity · path ·
+                      enums_and_unions_example · messages · nested_and_arrays_example ·
+                      object_policy_example · parity · path ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
                       spi · table   (suite `validation:`)
 ```
@@ -196,6 +199,21 @@ pub fn schemaOf<TypeName>() -> Schema<TypeName>
   range (`7.0` is whole, `1.5` and `2147483648` are `invalidType`); an `i64`
   field takes a whole number within ±(2^53 − 1).
 - **An undeclared key is refused** (`unrecognizedKey`; decision 144), at its own path, after the declared fields.
+- **Object policy** (front 125 step 5), each read by `#[schema]` and placed by
+  its own marker: `#[stripUnknown]` on the type drops the undeclared members; a
+  `#[rest]` field — one, typed `Dict<string, T>` — holds them, each decoded as
+  `T` at its own key; `#[present]` on a `?T` field takes an absent key as
+  `null` and refuses a key holding `null` (`invalidType`); `#[orElse(literal)]`
+  / `#[orElseOf("fn")]` give an absent key its default; `#[fallback(literal)]` /
+  `#[fallbackOf("fn")]` replace a value that does not decode or fails its
+  checks, with no violation (the record is built, validated, rebuilt with the
+  fallback of every such field, and validated again). A literal is a value of
+  the field's type — `string`, `i32`, `i64` (emitted as `schemas.widened(n.0)`),
+  `f64`, `bool`, or their `?T` — or the marker is refused at the field; a
+  function is named as text until decorator arguments are typed (decision
+  281). Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
+  is not `Dict<string, T>` or twice, `#[rest]` beside `#[stripUnknown]`, a
+  default beside `#[rest]` / `#[present]`.
 - **The checks are `#[validated]`'s.** A type that carries constraint markers
   is also `#[validated]`; the emitted decoder calls `validate<TypeName>` on the
   record it built and re-roots the report under the record's path

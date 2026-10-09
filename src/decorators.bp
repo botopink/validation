@@ -1512,6 +1512,52 @@ fn schemaEnum(name: string, variants: Array<string>, tag: string) -> string {
         + opts;
 }
 
+fn isIntLexeme(l: string) -> bool {
+    val digits = if (l.startsWith("-")) l.slice(1, l.length()) else l;
+    if (digits == "") return false;
+    return digits.split("").filter({ c -> "0123456789".indexOf(c) < 0 }).length
+        == 0;
+}
+
+fn isNumberLexeme(l: string) -> bool {
+    val body = if (l.startsWith("-")) l.slice(1, l.length()) else l;
+    if (body == "") return false;
+    val strange = body
+        .split("")
+        .filter({ c -> "0123456789.eE-+".indexOf(c) < 0 });
+    return strange.length == 0 && "0123456789".indexOf(body.slice(0, 1)) >= 0;
+}
+
+// The expression a literal default or fallback is emitted as, for a field of
+// type `t` (its `?` taken off; `declared` as written), or `"!" + why` when the
+// lexeme is not a value of that type. A default of another type — an enum, a
+// record — waits on typed decorator arguments (decision 281).
+fn literalFor(l: string, t: string, declared: string) -> string {
+    if (t == "string") {
+        if (l.startsWith("\"") && l.endsWith("\"") && l.length() >= 2) return l;
+        return "!the literal `" + l + "` is not a `string`";
+    }
+    if (t == "i32") {
+        if (isIntLexeme(l)) return l;
+        return "!the literal `" + l + "` is not an `i32`";
+    }
+    if (t == "i64") {
+        if (isIntLexeme(l)) return "schemas.widened(" + l + ".0)";
+        return "!the literal `" + l + "` is not an `i64`";
+    }
+    if (t == "f64") {
+        if (isNumberLexeme(l)) return asF64(l);
+        return "!the literal `" + l + "` is not an `f64`";
+    }
+    if (t == "bool") {
+        if (l == "true" || l == "false") return l;
+        return "!the literal `" + l + "` is not a `bool`";
+    }
+    return "!a literal applies to `string`, `i32`, `i64`, `f64` and `bool` fields, and this field is `"
+        + declared
+        + "`";
+}
+
 pub fn schema(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Type) decl.fail("#[schema] must annotate a type");
     val tags = decl.annotations.filter({ a -> a.name == "tag" });
@@ -1535,42 +1581,177 @@ pub fn schema(comptime decl: @Decl) {
     var args: Array<string> = [];
     var known: Array<string> = [];
     var helpers: Array<string> = [];
+    var fallbacks: Array<string> = [];
     var problem = "";
     var marked = false;
+    var rests = 0;
     decl.fields.forEach({ f ->
+        val declared = f.typeName;
+        val names = f.annotations.map({ a -> a.name });
         val source = "(input.field(\"" + f.name + "\") ?? Json.Null)";
         val path = "schemas.memberPath(at, \"" + f.name + "\")";
-        val supported = schemaSupported(f.typeName);
-        val call = if (supported)
-            schemaCall(f.typeName, source, path, decl.name, f.name, "0")
+        val supported = schemaSupported(declared);
+        val decoded = if (supported)
+            schemaCall(declared, "input", "at", decl.name, f.name, "0")
+        else
+            "0";
+        var call = if (supported)
+            schemaCall(declared, source, path, decl.name, f.name, "0")
         else
             "0";
         if (supported)
-            helpers.push(schemaHelpers(f.typeName, decl.name, f.name, "0"));
+            helpers.push(schemaHelpers(declared, decl.name, f.name, "0"));
         if (supported == false)
             problem = "#[schema] on `"
                 + decl.name
                 + "`: field `"
                 + f.name
                 + "` is `"
-                + f.typeName
+                + declared
                 + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, Array<T>, Set<T>, Dict<K, V> (K string, i32 or a #[schema] enum), tuples, unions and other #[schema] types";
-        val exhaustive = f.annotations.filter(
-            { a -> a.name == "exhaustive" },
-        ).length
-            > 0;
+        val where = "#[schema] on field `"
+            + f.name
+            + "` of `"
+            + decl.name
+            + "`: ";
+        val bare = if (declared.startsWith("?"))
+            declared.slice(1, declared.length())
+        else
+            declared;
+        val exhaustive = names.indexOf("exhaustive") >= 0;
+        val isRest = names.indexOf("rest") >= 0;
+        val isPresent = names.indexOf("present") >= 0;
+        val orElseLexeme = f.annotations
+            .filter({ a -> a.name == "orElse" })
+            .map({ a -> a.args.join("") })
+            .join("");
+        val orElseFn = unquoted(
+            f.annotations
+                .filter({ a -> a.name == "orElseOf" })
+                .map({ a -> a.args.join("") })
+                .join(""),
+        );
+        val fallbackLexeme = f.annotations
+            .filter({ a -> a.name == "fallback" })
+            .map({ a -> a.args.join("") })
+            .join("");
+        val fallbackFn = unquoted(
+            f.annotations
+                .filter({ a -> a.name == "fallbackOf" })
+                .map({ a -> a.args.join("") })
+                .join(""),
+        );
         f.annotations.forEach({ a ->
             if (schemaIsMarker(a.name)) marked = true;
         });
+        if (isPresent) {
+            if (declared.startsWith("?") == false)
+                problem = where
+                    + "#[present] says the key may be left out, so the field is `?T`, and this one is `"
+                    + declared
+                    + "`";
+            if (declared.startsWith("?"))
+                call = "schemas.presentOf(input, \""
+                    + f.name
+                    + "\", at, "
+                    + schemaRef(bare, decl.name, f.name, "0_0")
+                    + ")";
+        }
+        if (isRest) {
+            val kv = if (schemaIsDict(declared)) schemaArgs(declared) else [""];
+            if (kv.slice(0, 1).join("") != "string")
+                problem = where
+                    + "#[rest] holds the members the type does not declare, so the field is `Dict<string, T>`, and this one is `"
+                    + declared
+                    + "`";
+            rests = rests + 1;
+            call = schemaCall(
+                declared,
+                "schemas.restOf(input, [__KNOWN__])",
+                "at",
+                decl.name,
+                f.name,
+                "0",
+            );
+        }
+        val orElse = if (orElseLexeme != "")
+            literalFor(orElseLexeme, bare, declared)
+        else if (orElseFn != "")
+            orElseFn + "()"
+        else
+            "";
+        if (orElse.startsWith("!"))
+            problem = "#[orElse] on field `"
+                + f.name
+                + "` of `"
+                + decl.name
+                + "`: "
+                + orElse.slice(1, orElse.length());
+        if (orElse != ""
+            && orElse.startsWith("!") == false
+            && (isRest || isPresent))
+            problem = where
+                + "a default is what an absent key takes, and #[rest] / #[present] say what absence means already";
+        val orElseName = "__orElse" + decl.name + "_" + f.name;
+        if (orElse != "" && orElse.startsWith("!") == false) {
+            helpers.push(
+                "fn "
+                    + orElseName
+                    + schemaResult(declared)
+                    + "    if (schemas.isNull(input)) return "
+                    + orElse
+                    + ";\n    return try "
+                    + decoded
+                    + ";\n}\n",
+            );
+            call = orElseName + "(" + source + ", " + path + ")";
+        }
+        val fallback = if (fallbackLexeme != "")
+            literalFor(fallbackLexeme, bare, declared)
+        else if (fallbackFn != "")
+            fallbackFn + "()"
+        else
+            "";
+        if (fallback.startsWith("!"))
+            problem = "#[fallback] on field `"
+                + f.name
+                + "` of `"
+                + decl.name
+                + "`: "
+                + fallback.slice(1, fallback.length());
+        if (fallback != "" && fallback.startsWith("!") == false) {
+            val inner = if (orElse != "" && orElse.startsWith("!") == false)
+                orElseName + "(input, at)"
+            else
+                decoded;
+            val fallbackName = "__fallback" + decl.name + "_" + f.name;
+            helpers.push(
+                "fn "
+                    + fallbackName
+                    + schemaResult(declared)
+                    + "    val __r = "
+                    + inner
+                    + ";\n    if (schemas.violationsOf(__r).length > 0) return "
+                    + fallback
+                    + ";\n    return try __r;\n}\n",
+            );
+            call = fallbackName + "(" + source + ", " + path + ")";
+            fallbacks.push(
+                f.name
+                    + ": if (__bad.indexOf(\""
+                    + f.name
+                    + "\") >= 0) "
+                    + fallback
+                    + " else __v."
+                    + f.name,
+            );
+        }
         decoders.push("    val __r_" + f.name + " = " + call + ";");
         gathers.push(
             "    __vs = __vs.append(schemas.violationsOf(__r_" + f.name + "));",
         );
         if (exhaustive) {
-            val kv = if (schemaIsDict(f.typeName))
-                schemaArgs(f.typeName)
-            else
-                [""];
+            val kv = if (schemaIsDict(declared)) schemaArgs(declared) else [""];
             val k = kv.slice(0, 1).join("");
             if (schemaIsDeclared(k))
                 gathers.push(
@@ -1588,22 +1769,48 @@ pub fn schema(comptime decl: @Decl) {
                     + "` of `"
                     + decl.name
                     + "`: it applies to `Dict<K, V>` whose key `K` is a #[schema] enum, and this field is `"
-                    + f.typeName
+                    + declared
                     + "`";
         }
         args.push(f.name + ": try __r_" + f.name);
-        known.push("\"" + f.name + "\"");
+        if (isRest == false) known.push("\"" + f.name + "\"");
     });
+    if (rests > 1)
+        problem = "#[schema] on `"
+            + decl.name
+            + "`: one #[rest] field holds every undeclared member, and this type has "
+            + [rests].join("");
     val helperText = helpers.join("");
     if (helperText != "") @emit(helperText);
     val validated = decl.annotations.filter(
         { a -> a.name == "validated" },
     ).length
         > 0;
-    val checks = if (validated)
-        "    val __checked = schemas.under(at, __v.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n"
+    val strip = decl.annotations.filter(
+        { a -> a.name == "stripUnknown" },
+    ).length
+        > 0;
+    if (strip && rests > 0)
+        problem = "#[stripUnknown] on `"
+            + decl.name
+            + "`: a #[rest] field keeps the undeclared members, so they cannot also be dropped";
+    val undeclared = if (strip || rests > 0)
+        ""
     else
-        "";
+        "\n    __vs = __vs.append(schemas.unknownKeys(input, ["
+            + known.join(", ")
+            + "], at, \""
+            + decl.name
+            + "\"));";
+    val checked = if (fallbacks.length > 0)
+        "    val __bad = schemas.failedFields(__v.validate());\n    val __w = "
+            + decl.name
+            + "(..__v, "
+            + fallbacks.join(", ")
+            + ");\n    val __checked = schemas.under(at, __w.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n    return __w;\n"
+    else
+        "    val __checked = schemas.under(at, __v.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n    return __v;\n";
+    val checks = if (validated) checked else "    return __v;\n";
     val recordText = if (isEnum)
         ""
     else
@@ -1614,22 +1821,18 @@ pub fn schema(comptime decl: @Decl) {
             + ", ValidationReport> {\n"
             + "    val __shape = schemas.objectProblems(input, at);\n"
             + "    if (__shape.length > 0) { throw ValidationReport(violations: __shape); }\n"
-            + decoders.join("\n")
+            + decoders.join("\n").replaceAll("__KNOWN__", known.join(", "))
             + "\n    var __vs: Array<Violation> = [];\n"
             + gathers.join("\n")
-            + "\n    __vs = __vs.append(schemas.unknownKeys(input, ["
-            + known.join(", ")
-            + "], at, \""
-            + decl.name
-            + "\"));\n"
-            + "    if (__vs.length > 0) { throw ValidationReport(violations: __vs); }\n"
+            + undeclared
+            + "\n    if (__vs.length > 0) { throw ValidationReport(violations: __vs); }\n"
             + "    val __v = "
             + decl.name
             + "("
             + args.join(", ")
             + ");\n"
             + checks
-            + "    return __v;\n}\n"
+            + "}\n"
             + schemaCommon(decl.name);
     if (recordText != "") @emit(recordText);
     if (problem != "") decl.fail(problem);
@@ -1654,4 +1857,64 @@ pub fn tag(comptime decl: @Decl, comptime member: string) {
 pub fn exhaustive(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[exhaustive] must annotate a field");
+}
+
+// ── step 5: object policy ───────────────────────────────────────────────────
+//
+// What a record does with what it was not told about. `#[schema]` reads every
+// one of these; each checks only its own placement here.
+
+// `z.object` (strips): the undeclared members are dropped — the type says so.
+// The default refuses them (decision 144).
+pub fn stripUnknown(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Type)
+        decl.fail("#[stripUnknown] must annotate a type");
+}
+
+// `z.looseObject` / `.catchall(T)`: a `Dict<string, T>` field holding every
+// undeclared member, decoded as `T`, in document order.
+pub fn rest(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field) decl.fail("#[rest] must annotate a field");
+}
+
+// `.exactOptional()`: on a `?T` field, the key may be left out; a key holding
+// `null` is refused.
+pub fn present(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[present] must annotate a field");
+}
+
+// `.default(v)`: an absent (or `null`) key takes the literal, which is a value
+// of the field's type.
+pub fn orElse(comptime decl: @Decl, comptime value: string | i32 | f64 | bool) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[orElse] must annotate a field");
+}
+
+// `.default(fn)`: an absent key takes what the named function of the type's
+// module answers, called per parse. The name is text until decorator arguments
+// are typed (decision 281).
+pub fn orElseOf(comptime decl: @Decl, comptime function: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[orElseOf] must annotate a field");
+    val problem = textArgProblem("orElseOf", "function name", function);
+    if (problem != "") decl.fail(problem);
+}
+
+// `.catch(v)`: a value that does not decode, or fails its checks, is replaced
+// by the literal and no violation is recorded for it.
+pub fn fallback(
+    comptime decl: @Decl,
+    comptime value: string | i32 | f64 | bool,
+) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[fallback] must annotate a field");
+}
+
+// `.catch(fn)`: the same, with what the named function answers.
+pub fn fallbackOf(comptime decl: @Decl, comptime function: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[fallbackOf] must annotate a field");
+    val problem = textArgProblem("fallbackOf", "function name", function);
+    if (problem != "") decl.fail(problem);
 }
