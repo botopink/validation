@@ -13,7 +13,7 @@
 //// a test that inherited another test's leftovers would be asserting the wrong
 //// thing.
 
-import {binding.bindInt, binding.bindBool, binding.bindRequired, binding.bindEpochMillis, binding.bindingReport, binding.bindingCount, binding.bindingReset, binding.bindingIsolated, binding.isIntegerText, binding.parseI32, binding.bindFloat};
+import {binding.bindInt, binding.bindBool, binding.bindRequired, binding.bindEpochMillis, binding.bindingReport, binding.bindingCount, binding.bindingReset, binding.bindingIsolated, binding.isIntegerText, binding.bindFloat};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 
@@ -45,9 +45,6 @@ test "validation: what counts as integer text" {
     assert isIntegerText("x12") == false;
     assert isIntegerText("1.5") == false;
     assert isIntegerText("1 2") == false;
-    assert parseI32("0") == 0;
-    assert parseI32("00042") == 42;
-    assert parseI32("-7") == 0 - 7;
 }
 
 // ── the binders ─────────────────────────────────────────────────────────────
@@ -68,6 +65,19 @@ test "validation: bindInt rejects a trailing character and accepts a number" {
     assert bindInt("age", "12") == 12;
     assert bindingCount() == 1;
     assert codesOf(bindingReport()) == "typeMismatch";
+}
+
+test "validation: bindInt reads the i32 range's ends and refuses past them as a violation" {
+    val _f = fresh();
+    assert bindInt("age", "2147483647") == 2147483647;
+    assert bindInt("age", "-2147483648") == -2147483648;
+    assert bindInt("age", " +00042 ") == 42;
+    assert bindingCount() == 0;
+    assert bindInt("age", "2147483648") == 0;
+    assert bindInt("age", "-2147483649") == 0;
+    assert bindInt("age", "99999999999999999999") == 0;
+    assert bindingCount() == 3;
+    assert codesOf(bindingReport()) == "typeMismatch,typeMismatch,typeMismatch";
 }
 
 test "validation: bindBool takes four spellings and refuses the rest" {

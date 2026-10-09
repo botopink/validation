@@ -72,7 +72,7 @@ validation/
 │   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern,
 │   │                   vCheck (`#[check(rule)]`), vEach (`#[each(marker)]`)
 │   ├── binding.bp      bindInt, bindBool, bindFloat, bindRequired, bindEpochMillis, bindingReport, bindingCount,
-│   │                   bindingReset, bindingIsolated, isIntegerText, parseI32   (accumulator: templates)
+│   │                   bindingReset, bindingIsolated, isIntegerText   (accumulator: templates; numerals: std's parseInt, toI32)
 │   ├── codecs.bp       the twelve codec recipes as decode / encode pairs: textToInt / intToText,
 │   │                   textToLong / longToText, textToFloat / floatToText, isoToMillis / millisToIso,
 │   │                   secondsToMillis / millisToSeconds, textToJson / jsonToText, base64ToText /

@@ -93,9 +93,10 @@ fn record(field: string, code: string, raw: string, params: Array<Arg>) -> i32 {
 
 // ── the text predicates: one predicate, both rows ───────────────────────────
 //
-// Every decision about whether a string is a number is made HERE, in botopink,
-// on both rows. The coercion path has no host cell: an `i32` is folded below,
-// an `i64` is std's `String.parseInt` (`bindEpochMillis`).
+// Every decision about whether a string is a number is std's `String.parseInt`
+// over the trimmed text, on both rows: the coercion path has no host cell of
+// its own. An `i64` is its answer (`bindEpochMillis`); an `i32` is that answer
+// inside the `i32` range, narrowed by std's `toI32()` (`bindInt`).
 
 pub fn digits() -> string {
     return "0123456789";
@@ -117,27 +118,23 @@ pub fn isIntegerText(raw: string) -> bool {
     return ok;
 }
 
-// An i32 from a string `isIntegerText` accepted. Pure botopink: `acc * 10 +
-// digit` over `String.at`, the shape `config.bp` uses, and not `String.slice`
-// or `String.charCodeAt` — both of which make the commonJS backend emit a
-// self-recursive `String.prototype.charCodeAt` patch that kills the module.
-pub fn parseI32(raw: string) -> i32 {
-    val t = raw.trim();
-    val head = t.at(0) ?? "";
-    val negative = head == "-";
-    var i = if (negative || head == "+") 1 else 0;
-    var n = 0;
-    while (i < t.length()) {
-        n = n * 10 + digits().indexOf(t.at(i) ?? "");
-        i = i + 1;
-    }
-    if (negative) return 0 - n else return n;
-}
-
 // ── the binders ─────────────────────────────────────────────────────────────
 
+// An `i32` from std's integer grammar: `String.parseInt` over the trimmed text,
+// then `toI32()` once the value is known to fit. A numeral past the `i32` range
+// is a `typeMismatch` and `0`, as anything else that is not a whole number —
+// never a wrap and never an abort.
 pub fn bindInt(field: string, raw: string) -> i32 {
-    if (isIntegerText(raw)) return parseI32(raw);
+    return case raw.trim().parseInt() {
+        Ok(n) -> if (n >= -2147483648 && n <= 2147483647)
+            n.toI32()
+        else
+            intMismatch(field, raw);
+        Error(_) -> intMismatch(field, raw);
+    };
+}
+
+fn intMismatch(field: string, raw: string) -> i32 {
     val _v = record(field, "typeMismatch", raw, [arg("type", "whole number")]);
     return 0;
 }
