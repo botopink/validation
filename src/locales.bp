@@ -1,0 +1,242 @@
+//// validation — the shipped locales (Zod's `z.config(z.locales.*())`, decision
+//// 325): one `fn() -> MessageSource` each, handed to `setMessageSource`. A
+//// locale is data: a template for every code `messages.codes()` names, with
+//// the built-in template's placeholders and no other (`test/locales_test.bp`
+//// fails by name when one is missing). `en` is the built-in table itself
+//// (`messages.builtInTemplate`); negotiation between locales is `105-i18n`'s.
+
+import {messages.MessageSource, messages.builtInTemplate};
+
+// English: the built-in templates, under the locale `en`.
+pub fn en() -> MessageSource {
+    return MessageSource(
+        locale: { -> "en" },
+        template: { key -> englishTemplate(key) },
+    );
+}
+
+fn englishTemplate(key: string) -> string {
+    if (key.startsWith("en.")) return "";
+    val text = builtInTemplate(key);
+    if (text == "is not valid" && key != "custom") return "";
+    return text;
+}
+
+// Brazilian Portuguese, under the locale `pt-BR`.
+pub fn ptBR() -> MessageSource {
+    return MessageSource(
+        locale: { -> "pt-BR" },
+        template: { key -> ptBRTemplate(key) },
+    );
+}
+
+// Spanish, under the locale `es`.
+pub fn es() -> MessageSource {
+    return MessageSource(
+        locale: { -> "es" },
+        template: { key -> esTemplate(key) },
+    );
+}
+
+// The template of `code` in Brazilian Portuguese; `""` for a key it does not hold
+// (a locale-qualified key included — the bare code is asked next).
+fn ptBRTemplate(code: string) -> string {
+    if (code == "notNull") return "não pode ser nulo";
+    if (code == "notBlank") return "não pode estar em branco";
+    if (code == "notEmpty") return "não pode estar vazio";
+    if (code == "sizeBetween")
+        return "o tamanho deve estar entre {min} e {max}";
+    if (code == "minValue") return "deve ser no mínimo {min}";
+    if (code == "maxValue") return "deve ser no máximo {max}";
+    if (code == "positive") return "deve ser maior que 0";
+    if (code == "positiveOrZero") return "deve ser maior ou igual a 0";
+    if (code == "email") return "deve ser um endereço de e-mail bem formado";
+    if (code == "pattern") return "deve corresponder a {regex}";
+    if (code == "pastDate") return "deve estar no passado";
+    if (code == "futureDate") return "deve estar no futuro";
+    if (code == "unknownConstraint")
+        return "nomeia a restrição {name}, que não está registrada - registradas: [{registered}]";
+    if (code == "typeMismatch") return "deve ser um {type}";
+    if (code == "required") return "é obrigatório";
+    if (code == "invalidType")
+        return "deve ser {expected}, recebido {received}";
+    if (code == "unrecognizedKey") return "{key} não é um campo de {type}";
+    if (code == "invalidUnion")
+        return "não corresponde a nenhuma das formas aceitas - {arms}";
+    if (code == "invalidValue") return "deve ser um de {options}";
+    if (code == "duplicate") return "repete um item anterior";
+    if (code == "invalidJson") return "não é um documento JSON - {reason}";
+    if (code == "custom") return "não é válido";
+    if (code == "minLength") return "o comprimento deve ser no mínimo {min}";
+    if (code == "maxLength") return "o comprimento deve ser no máximo {max}";
+    if (code == "length") return "o comprimento deve ser exatamente {length}";
+    if (code == "startsWith") return "deve começar com {prefix}";
+    if (code == "endsWith") return "deve terminar com {suffix}";
+    if (code == "includes") return "deve incluir {substring}";
+    if (code == "uppercase") return "não pode conter letra minúscula";
+    if (code == "lowercase") return "não pode conter letra maiúscula";
+    if (code == "emailHtml5")
+        return "deve ser um endereço de e-mail bem formado (HTML5)";
+    if (code == "emailRfc5322")
+        return "deve ser um endereço de e-mail bem formado (RFC 5322)";
+    if (code == "emailUnicode")
+        return "deve ser um endereço de e-mail bem formado (Unicode)";
+    if (code == "uuid") return "deve ser um UUID";
+    if (code == "uuidV") return "deve ser um UUID da versão {version}";
+    if (code == "guid") return "deve ser um GUID";
+    if (code == "url") return "deve ser uma URL com esquema e host";
+    if (code == "urlHost")
+        return "deve ser uma URL cujo host corresponde a {hostname}";
+    if (code == "urlProtocol")
+        return "deve ser uma URL cujo esquema corresponde a {protocol}";
+    if (code == "httpUrl") return "deve ser uma URL http ou https com domínio";
+    if (code == "hostname") return "deve ser um nome de host";
+    if (code == "e164") return "deve ser um telefone E.164";
+    if (code == "emoji") return "deve ser emoji";
+    if (code == "base64") return "deve estar em base64";
+    if (code == "base64url") return "deve estar em base64url";
+    if (code == "hex") return "deve ser hexadecimal";
+    if (code == "jwt") return "deve ser um JWT";
+    if (code == "jwtAlg") return "deve ser um JWT assinado com {alg}";
+    if (code == "nanoid") return "deve ser um nanoid";
+    if (code == "cuid") return "deve ser um cuid";
+    if (code == "cuid2") return "deve ser um cuid2";
+    if (code == "ulid") return "deve ser um ULID";
+    if (code == "ipv4") return "deve ser um endereço IPv4";
+    if (code == "ipv6") return "deve ser um endereço IPv6";
+    if (code == "mac") return "deve ser um endereço MAC";
+    if (code == "macDelimiter")
+        return "deve ser um endereço MAC delimitado por {delimiter}";
+    if (code == "cidrv4") return "deve ser um bloco CIDR IPv4";
+    if (code == "cidrv6") return "deve ser um bloco CIDR IPv6";
+    if (code == "creditCard") return "deve ser um número de cartão";
+    if (code == "currencyCode") return "deve ser um código de moeda ISO 4217";
+    if (code == "iban") return "deve ser um IBAN";
+    if (code == "hash") return "deve ser um hash {algorithm}";
+    if (code == "hashEnc") return "deve ser um hash {algorithm} em {encoding}";
+    if (code == "isoDate") return "deve ser uma data ISO (AAAA-MM-DD)";
+    if (code == "isoTime") return "deve ser um horário ISO";
+    if (code == "isoTimePrecision")
+        return "deve ser um horário ISO de precisão {precision}";
+    if (code == "isoDatetime") return "deve ser uma data e hora ISO em UTC";
+    if (code == "isoDatetimeOffset")
+        return "deve ser uma data e hora ISO com fuso";
+    if (code == "isoDatetimeLocal") return "deve ser uma data e hora ISO local";
+    if (code == "isoDatetimePrecision")
+        return "deve ser uma data e hora ISO de precisão {precision}";
+    if (code == "isoDuration") return "deve ser uma duração ISO 8601";
+    if (code == "gt") return "deve ser maior que {bound}";
+    if (code == "lt") return "deve ser menor que {bound}";
+    if (code == "negative") return "deve ser menor que 0";
+    if (code == "negativeOrZero") return "deve ser menor ou igual a 0";
+    if (code == "multipleOf") return "deve ser múltiplo de {step}";
+    if (code == "safeInt") return "deve ser um inteiro seguro";
+    if (code == "float32") return "deve caber em um float de 32 bits";
+    if (code == "afterIso") return "deve ser depois de {instant}";
+    if (code == "beforeIso") return "deve ser antes de {instant}";
+    if (code == "literal") return "deve ser {expected}";
+    if (code == "oneOf") return "deve ser uma das opções {options}";
+    return "";
+}
+
+// The template of `code` in Spanish; `""` for a key it does not hold.
+fn esTemplate(code: string) -> string {
+    if (code == "notNull") return "no puede ser nulo";
+    if (code == "notBlank") return "no puede estar en blanco";
+    if (code == "notEmpty") return "no puede estar vacío";
+    if (code == "sizeBetween")
+        return "el tamaño debe estar entre {min} y {max}";
+    if (code == "minValue") return "debe ser como mínimo {min}";
+    if (code == "maxValue") return "debe ser como máximo {max}";
+    if (code == "positive") return "debe ser mayor que 0";
+    if (code == "positiveOrZero") return "debe ser mayor o igual a 0";
+    if (code == "email")
+        return "debe ser una dirección de correo bien formada";
+    if (code == "pattern") return "debe coincidir con {regex}";
+    if (code == "pastDate") return "debe estar en el pasado";
+    if (code == "futureDate") return "debe estar en el futuro";
+    if (code == "unknownConstraint")
+        return "nombra la restricción {name}, que no está registrada - registradas: [{registered}]";
+    if (code == "typeMismatch") return "debe ser un {type}";
+    if (code == "required") return "es obligatorio";
+    if (code == "invalidType")
+        return "debe ser {expected}, se recibió {received}";
+    if (code == "unrecognizedKey") return "{key} no es un campo de {type}";
+    if (code == "invalidUnion")
+        return "no coincide con ninguna de las formas aceptadas - {arms}";
+    if (code == "invalidValue") return "debe ser uno de {options}";
+    if (code == "duplicate") return "repite un elemento anterior";
+    if (code == "invalidJson") return "no es un documento JSON - {reason}";
+    if (code == "custom") return "no es válido";
+    if (code == "minLength") return "la longitud debe ser como mínimo {min}";
+    if (code == "maxLength") return "la longitud debe ser como máximo {max}";
+    if (code == "length") return "la longitud debe ser exactamente {length}";
+    if (code == "startsWith") return "debe empezar con {prefix}";
+    if (code == "endsWith") return "debe terminar con {suffix}";
+    if (code == "includes") return "debe incluir {substring}";
+    if (code == "uppercase") return "no puede contener una letra minúscula";
+    if (code == "lowercase") return "no puede contener una letra mayúscula";
+    if (code == "emailHtml5")
+        return "debe ser una dirección de correo bien formada (HTML5)";
+    if (code == "emailRfc5322")
+        return "debe ser una dirección de correo bien formada (RFC 5322)";
+    if (code == "emailUnicode")
+        return "debe ser una dirección de correo bien formada (Unicode)";
+    if (code == "uuid") return "debe ser un UUID";
+    if (code == "uuidV") return "debe ser un UUID de la versión {version}";
+    if (code == "guid") return "debe ser un GUID";
+    if (code == "url") return "debe ser una URL con esquema y host";
+    if (code == "urlHost")
+        return "debe ser una URL cuyo host coincide con {hostname}";
+    if (code == "urlProtocol")
+        return "debe ser una URL cuyo esquema coincide con {protocol}";
+    if (code == "httpUrl") return "debe ser una URL http o https con dominio";
+    if (code == "hostname") return "debe ser un nombre de host";
+    if (code == "e164") return "debe ser un teléfono E.164";
+    if (code == "emoji") return "debe ser emoji";
+    if (code == "base64") return "debe estar en base64";
+    if (code == "base64url") return "debe estar en base64url";
+    if (code == "hex") return "debe ser hexadecimal";
+    if (code == "jwt") return "debe ser un JWT";
+    if (code == "jwtAlg") return "debe ser un JWT firmado con {alg}";
+    if (code == "nanoid") return "debe ser un nanoid";
+    if (code == "cuid") return "debe ser un cuid";
+    if (code == "cuid2") return "debe ser un cuid2";
+    if (code == "ulid") return "debe ser un ULID";
+    if (code == "ipv4") return "debe ser una dirección IPv4";
+    if (code == "ipv6") return "debe ser una dirección IPv6";
+    if (code == "mac") return "debe ser una dirección MAC";
+    if (code == "macDelimiter")
+        return "debe ser una dirección MAC delimitada por {delimiter}";
+    if (code == "cidrv4") return "debe ser un bloque CIDR IPv4";
+    if (code == "cidrv6") return "debe ser un bloque CIDR IPv6";
+    if (code == "creditCard") return "debe ser un número de tarjeta";
+    if (code == "currencyCode") return "debe ser un código de moneda ISO 4217";
+    if (code == "iban") return "debe ser un IBAN";
+    if (code == "hash") return "debe ser un hash {algorithm}";
+    if (code == "hashEnc") return "debe ser un hash {algorithm} en {encoding}";
+    if (code == "isoDate") return "debe ser una fecha ISO (AAAA-MM-DD)";
+    if (code == "isoTime") return "debe ser una hora ISO";
+    if (code == "isoTimePrecision")
+        return "debe ser una hora ISO de precisión {precision}";
+    if (code == "isoDatetime") return "debe ser una fecha y hora ISO en UTC";
+    if (code == "isoDatetimeOffset")
+        return "debe ser una fecha y hora ISO con zona";
+    if (code == "isoDatetimeLocal")
+        return "debe ser una fecha y hora ISO local";
+    if (code == "isoDatetimePrecision")
+        return "debe ser una fecha y hora ISO de precisión {precision}";
+    if (code == "isoDuration") return "debe ser una duración ISO 8601";
+    if (code == "gt") return "debe ser mayor que {bound}";
+    if (code == "lt") return "debe ser menor que {bound}";
+    if (code == "negative") return "debe ser menor que 0";
+    if (code == "negativeOrZero") return "debe ser menor o igual a 0";
+    if (code == "multipleOf") return "debe ser múltiplo de {step}";
+    if (code == "safeInt") return "debe ser un entero seguro";
+    if (code == "float32") return "debe caber en un float de 32 bits";
+    if (code == "afterIso") return "debe ser posterior a {instant}";
+    if (code == "beforeIso") return "debe ser anterior a {instant}";
+    if (code == "literal") return "debe ser {expected}";
+    if (code == "oneOf") return "debe ser una de las opciones {options}";
+    return "";
+}

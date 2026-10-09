@@ -23,6 +23,7 @@ pub mod path;
 pub mod report;
 pub mod table;
 pub mod messages;
+pub mod locales;
 pub mod schemas;
 pub mod spi;
 pub mod formats;

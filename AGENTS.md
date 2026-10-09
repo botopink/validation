@@ -33,8 +33,8 @@ validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
-│   ├── root.bp         pub mod path; report; table; messages; schemas; spi; formats; constraints; binding;
-│   │                   codecs; decorators
+│   ├── root.bp         pub mod path; report; table; messages; locales; schemas; spi; formats; constraints;
+│   │                   binding; codecs; decorators
 │   ├── path.bp         root, key, index, segments, head, parts, joined, parent — the path a violation's
 │   │                   `field` is
 │   ├── report.bp       Violation (restated, onlyIf, firstFailing), ValidationReport (isValid, merge,
@@ -46,7 +46,8 @@ validation/
 │   │                   toOpenApi30, withRefBase
 │   ├── messages.bp     Arg, arg, noArgs, MessageSource, setMessageSource, builtInOnly, messageSource,
 │   │                   useParseSource, clearParseSource, currentLocale, templateFor, interpolate,
-│   │                   message, builtInTemplate, showI32/I64/F64
+│   │                   message, codes, builtInTemplate, showI32/I64/F64
+│   ├── locales.bp      en, ptBR, es — one `fn() -> MessageSource` each (`en` is the built-in table)
 │   ├── schemas.bp      Schema<T> (parse, parseAt, parseWith, decode, accepts, optional, array), of, text, int, long,
 │   │                   float, boolean, anyJson; the decoders decodeString/Int/Long/Float/Bool/Json,
 │   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
@@ -84,7 +85,7 @@ validation/
 │                       #[schemaId], #[title], #[describe], #[example], #[deprecated]
 └── test/             binding · checks_and_formats_example · codecs · coercion_and_forms_example · collections_example · constraints ·
                       enums_and_unions_example · error_views_example · json_schema · json_schema_example ·
-                      message_order · messages · nested_and_arrays_example ·
+                      locales · message_order · messages · nested_and_arrays_example ·
                       object_policy_example · parity · path · refine_and_messages_example ·
                       transform_and_codec_example ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
@@ -118,7 +119,10 @@ source: a field's `#[message("…")]` restates the marker just before it
 (`schemas.typeRestated`) — `test/message_order_test.bp` holds the six levels.
 `#[stopOnFirst]` on a field reports only the first of its checks that fails
 (`Violation.firstFailing`); with fewer than two checks it is refused, and so is
-a `#[message]` with no marker before it. rakun installs a source over its own property keys
+a `#[message]` with no marker before it. The shipped locales are `locales.en()`, `locales.ptBR()` and `locales.es()`
+(`setMessageSource(locales.ptBR())`): a template for every code of
+`messages.codes()`, each a different text with the built-in template's
+placeholders (`test/locales_test.bp`). rakun installs a source over its own property keys
 at boot (rakun front 14 Step 7); onze installs the browser's in the entry it
 generates (front 68).
 

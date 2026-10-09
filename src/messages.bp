@@ -156,6 +156,14 @@ pub fn noArgs() -> Array<Arg> {
     return none;
 }
 
+// Every code `builtInTemplate` answers, in its order — what a locale must
+// hold a template for.
+pub fn codes() -> Array<string> {
+    return "notNull|notBlank|notEmpty|sizeBetween|minValue|maxValue|positive|positiveOrZero|email|pattern|pastDate|futureDate|unknownConstraint|typeMismatch|required|invalidType|unrecognizedKey|invalidUnion|invalidValue|duplicate|invalidJson|custom|minLength|maxLength|length|startsWith|endsWith|includes|uppercase|lowercase|emailHtml5|emailRfc5322|emailUnicode|uuid|uuidV|guid|url|urlHost|urlProtocol|httpUrl|hostname|e164|emoji|base64|base64url|hex|jwt|jwtAlg|nanoid|cuid|cuid2|ulid|ipv4|ipv6|mac|macDelimiter|cidrv4|cidrv6|creditCard|currencyCode|iban|hash|hashEnc|isoDate|isoTime|isoTimePrecision|isoDatetime|isoDatetimeOffset|isoDatetimeLocal|isoDatetimePrecision|isoDuration|gt|lt|negative|negativeOrZero|multipleOf|safeInt|float32|afterIso|beforeIso|literal|oneOf".split(
+        "|",
+    );
+}
+
 // ── the built-in defaults ───────────────────────────────────────────────────
 //
 // One function rather than a table, because a decorator body cannot reach a

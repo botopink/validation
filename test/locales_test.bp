@@ -1,0 +1,69 @@
+//// validation — the shipped locales (front 125 step 10). Every code the
+//// library reports has a template in every locale, a locale changes the text
+//// of every code, and no locale adds, drops or renames a placeholder: a
+//// message built under any locale binds the same `{name}`s.
+
+import {locales};
+import {messages.MessageSource, messages.setMessageSource, messages.builtInOnly, messages.builtInTemplate, messages.codes, messages.templateFor, messages.currentLocale};
+import {constraints.vMinLength};
+import {report.Violation};
+
+fn missingIn(source: MessageSource) -> string {
+    val template = source.template;
+    return codes().filter({ c -> template(c) == "" }).join(",");
+}
+
+// The placeholders of a template, in order: the names between `{` and `}`.
+fn placeholders(text: string) -> string {
+    return text
+        .split("{")
+        .slice(1, text.split("{").length)
+        .map({ part ->
+            part.split("}").slice(0, 1).join("");
+        })
+        .join(",");
+}
+
+test "validation: every code has a template in every shipped locale" {
+    assert missingIn(locales.en()) == "";
+    assert missingIn(locales.ptBR()) == "";
+    assert missingIn(locales.es()) == "";
+}
+
+test "validation: a locale changes the message of every code and no placeholder" {
+    assert unchangedIn(locales.ptBR()) == "";
+    assert unchangedIn(locales.es()) == "";
+    assert placeholdersMovedIn(locales.ptBR()) == "";
+    assert placeholdersMovedIn(locales.es()) == "";
+}
+
+fn unchangedIn(source: MessageSource) -> string {
+    val template = source.template;
+    return codes().filter({ c -> template(c) == builtInTemplate(c) }).join(",");
+}
+
+fn placeholdersMovedIn(source: MessageSource) -> string {
+    val template = source.template;
+    return codes()
+        .filter({ c ->
+            placeholders(template(c)) != placeholders(builtInTemplate(c));
+        })
+        .join(",");
+}
+
+test "validation: setMessageSource(locales.ptBR()) reports in Portuguese" {
+    val _s = setMessageSource(locales.ptBR());
+    assert currentLocale() == "pt-BR";
+    assert templateFor("required", builtInTemplate("required"))
+        == "é obrigatório";
+    val vs = vMinLength("name", "a", 3);
+    assert vs.map({ v -> v.message }).join("")
+        == "o comprimento deve ser no mínimo 3";
+    val _e = setMessageSource(locales.es());
+    assert vMinLength("name", "a", 3).map({ v -> v.message }).join("")
+        == "la longitud debe ser como mínimo 3";
+    val _n = setMessageSource(locales.en());
+    assert vMinLength("name", "a", 3).map({ v -> v.message }).join("")
+        == "length must be at least 3";
+    val _z = setMessageSource(builtInOnly());
+}

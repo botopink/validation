@@ -12,6 +12,7 @@
     "path.bp",
     "report.bp",
     "messages.bp",
+    "locales.bp",
     "formats.bp",
     "schemas.bp",
     "table.bp",
