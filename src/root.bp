@@ -1,5 +1,5 @@
 //// validation — the constraints the server enforces are the constraints the
-//// client mirrors. A bundled library (decision 116 rule 5), neutral like
+//// client mirrors. A shared library (decisions 116 rule 5, 326), neutral like
 //// `routing`: it imports `std` and nothing else, ships `.bp` files only
 //// (decision 117 rule 8) and is compiled for erlang and commonJS from one
 //// source.

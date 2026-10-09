@@ -35,7 +35,7 @@ pub behavior Constraint {
 
 // ── the host table ──────────────────────────────────────────────────────────
 //
-// Inline templates only — a bundled library ships `.bp` files (decision 117
+// Inline templates only — a shared library ships `.bp` files (decision 117
 // rule 8). Erlang: ONE `persistent_term` entry keyed `{validation,
 // constraints}` holding `{Order, Funs, Codes}` — the names in registration
 // order, name → check closure, name → code. Written at registration (module
