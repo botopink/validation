@@ -161,7 +161,7 @@ pub fn bindRequired(field: string, raw: string) -> string {
 }
 
 // The `i64` path is std's `String.parseInt` over the trimmed text — the one
-// rule for a numeral on every target; a numeral beyond ±(2^53 - 1) is a
+// rule for a numeral on every target; a numeral past the `i64` range is a
 // `typeMismatch` there too.
 pub fn bindEpochMillis(field: string, raw: string) -> i64 {
     return case raw.trim().parseInt() {

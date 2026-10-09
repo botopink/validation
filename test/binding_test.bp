@@ -110,14 +110,15 @@ test "validation: bindEpochMillis reads an epoch and refuses anything else" {
 }
 
 // std's `String.parseInt` is the rule: the text is trimmed first, and a numeral
-// beyond 2^53 - 1 is refused on every target.
-test "validation: bindEpochMillis trims and refuses a numeral beyond 2^53 - 1" {
+// past the `i64` range is refused on every target (decisions 176, 319).
+test "validation: bindEpochMillis trims and refuses a numeral past i64" {
     val _f = fresh();
     assert bindEpochMillis("ts", " +1700000000000 ")
         == bindEpochMillis("ts", "1700000000000");
-    assert bindEpochMillis("ts", "9007199254740991") > 0;
+    assert bindEpochMillis("ts", "9007199254740993") == 9007199254740993l;
+    assert bindEpochMillis("ts", "9223372036854775807") > 0;
     assert bindingCount() == 0;
-    assert bindEpochMillis("ts", "9007199254740992") == 0;
+    assert bindEpochMillis("ts", "9223372036854775808") == 0;
     assert bindEpochMillis("ts", "1.5") == 0;
     assert codesOf(bindingReport()) == "typeMismatch,typeMismatch";
 }

@@ -313,7 +313,7 @@ library writes instead.
 - An integer literal does not widen to `i64` in arithmetic; `wholeI64`
   (`schemas.bp`) is the host cell that produces one. `bindEpochMillis` reads its
   `i64` with std's `String.parseInt` over the trimmed text (front 97), so a
-  numeral beyond ±(2^53 − 1) is a `typeMismatch` on both targets.
+  numeral past the `i64` range is a `typeMismatch` on every target (decision 319).
 
 ## Local gate
 
