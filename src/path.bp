@@ -91,3 +91,71 @@ pub fn segments(field: string) -> Array<string> {
 pub fn head(field: string) -> string {
     return segments(field).at(0) ?? "";
 }
+
+// The parts of a path with what each is: `#(true, "2")` an index, `#(false,
+// "name")` a key — `segments` with the difference an index makes kept.
+pub fn parts(field: string) -> Array<#(bool, string)> {
+    val chars = field.split("");
+    var out: Array<#(bool, string)> = [];
+    var current = "";
+    var quotedKey = false;
+    var escaped = false;
+    var inIndex = false;
+    var i = 0;
+    while (i < chars.length) {
+        val c = chars.at(i) ?? "";
+        val next = chars.at(i + 1) ?? "";
+        if (quotedKey) {
+            if (escaped) {
+                current = current + c;
+                escaped = false;
+            } else if (c == "\\") escaped = true else if (c == "\"") {
+                out = out.append([#(false, current)]);
+                current = "";
+                quotedKey = false;
+                i = i + 1;
+            } else current = current + c;
+        } else if (c == "[" && next == "\"") {
+            if (current != "") out = out.append([#(false, current)]);
+            current = "";
+            quotedKey = true;
+            i = i + 1;
+        } else if (c == "[") {
+            if (current != "") out = out.append([#(false, current)]);
+            current = "";
+            inIndex = true;
+        } else if (c == "]") {
+            out = out.append([#(true, current)]);
+            current = "";
+            inIndex = false;
+        } else if (c == ".") {
+            if (current != "") out = out.append([#(false, current)]);
+            current = "";
+        } else current = current + c;
+        i = i + 1;
+    }
+    if (current != "") out = out.append([#(inIndex, current)]);
+    return out;
+}
+
+// A path rebuilt from its parts.
+pub fn joined(ps: Array<#(bool, string)>) -> string {
+    return ps.fold(
+        "",
+        { acc, p -> if (p[0]) index(acc, digitsOf(p[1])) else key(acc, p[1]) },
+    );
+}
+
+fn digitsOf(text: string) -> i32 {
+    return text
+        .split("")
+        .fold(0, { acc, c -> acc * 10 + "0123456789".indexOf(c) });
+}
+
+// The path of the value holding the one at `field`: `a.b` → `a`, `xs[1]` →
+// `xs`, a member of the root → the root.
+pub fn parent(field: string) -> string {
+    val ps = parts(field);
+    if (ps.length == 0) return "";
+    return joined(ps.slice(0, ps.length - 1));
+}

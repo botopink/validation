@@ -22,6 +22,8 @@
 //// `cpf` makes the report INVALID, with the name in the message, at the first
 //// validation call.
 
+import {schemas.jsonText, schemas.refsRenamed, schemas.refsPrefixed};
+import {json, json.Json} from "std";
 import {report.Violation, report.violation, report.noViolation, report.oneViolation};
 import {messages.message, messages.builtInTemplate, messages.arg, messages.noArgs};
 
@@ -146,4 +148,55 @@ pub fn vConstraint(
             value,
         ),
     );
+}
+
+// ── step 9: the schema registry ─────────────────────────────────────────────
+//
+// `z.globalRegistry`: a type's JSON Schema under an id — `spi.registerSchema(
+// "User", jsonSchemaOfUser)` — and every registered one as one document
+// (`registeredJsonSchemas`). Host state beside the constraint registry: the
+// `persistent_term` entry `{validation, schemas}` on erlang (`[{Id, Fun}]` in
+// registration order), the `schemas` member of the node cell, made when first
+// written (the cell's init literal is unchanged).
+
+#[@External.Node("""(function(__I, __F){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); __S.set(__I, __F); return __S.size; })($0, $1)""")]
+#[@External.Erlang("""(fun(VaI__, VaF__) -> VaL__ = persistent_term:get({validation, schemas}, []), VaL2__ = case lists:keymember(VaI__, 1, VaL__) of true -> lists:keyreplace(VaI__, 1, VaL__, {VaI__, VaF__}); false -> VaL__ ++ [{VaI__, VaF__}] end, persistent_term:put({validation, schemas}, VaL2__), length(VaL2__) end)($0, $1)""")]
+declare fn schemaPut(id: string, document: fn() -> string) -> i32;
+
+#[@External.Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); return Array.from(__S.entries()).map(function(__E){ return [__E[0], __E[1]()]; }); })()""")]
+#[@External.Erlang("""(fun() -> [{VaI__, VaF__()} || {VaI__, VaF__} <- persistent_term:get({validation, schemas}, [])] end)()""")]
+declare fn schemaDocuments() -> Array<#(string, string)>;
+
+#[@External.Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.schemas = new Map(); return 0; })()""")]
+#[@External.Erlang("""(fun() -> persistent_term:erase({validation, schemas}), 0 end)()""")]
+declare fn schemaClear() -> i32;
+
+pub fn registerSchema(id: string, document: fn() -> string) -> i32 {
+    return schemaPut(id, document);
+}
+
+pub fn clearSchemas() -> i32 {
+    return schemaClear();
+}
+
+// `{"schemas": {<id>: <schema>, …}}` in registration order — each schema with
+// its `id` first, no `$schema` and no `$defs`, a `$ref` to another type written
+// as that type's name (`"Post"`) and one to itself as its own id
+// (ZOD_DOCUMENTATION.md § 8.4).
+pub fn registeredJsonSchemas() -> string {
+    val entries = schemaDocuments().map({ e -> registryEntry(e[0], e[1]) });
+    return jsonText(Json.Obj([#("schemas", Json.Obj(entries))]));
+}
+
+fn registryEntry(id: string, doc: string) -> #(string, Json) {
+    val tree = try json.decode(doc) catch Json.Null;
+    val kept = tree
+        .members()
+        .filter({ m -> m[0] != "$schema" && m[0] != "$defs" });
+    val node = refsRenamed(
+        Json.Obj([#("id", Json.Str(id))].append(kept)),
+        "#",
+        id,
+    );
+    return #(id, refsPrefixed(node, "#/$defs/", ""));
 }

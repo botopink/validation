@@ -31,17 +31,19 @@ A `#[validated]` record in a consumer imports only `from "validation"` and
 ```text
 validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
-│                     (`files`: formats before schemas — the coercion of an ISO instant reads its shape)
 ├── AGENTS.md         ← you are here
 ├── src/
-│   ├── root.bp         pub mod path; report; table; messages; formats; schemas; spi; constraints; binding; codecs;
-│   │                   decorators
-│   ├── path.bp         root, key, index, segments, head — the path a violation's `field` is
+│   ├── root.bp         pub mod path; report; table; messages; schemas; spi; formats; constraints; binding;
+│   │                   codecs; decorators
+│   ├── path.bp         root, key, index, segments, head, parts, joined, parent — the path a violation's
+│   │                   `field` is
 │   ├── report.bp       Violation (restated, onlyIf, firstFailing), ValidationReport (isValid, merge,
-│   │                   toJson, toProblemDetail, empty, of),
+│   │                   toJson, toProblemDetail, flatten, tree, pretty, empty, of), Flat,
+│   │                   ReportTree (none),
 │   │                   violationJson, violation, noViolation, oneViolation
 │   ├── table.bp        constraintTableJson and the blob grammar (splitBlob, paramNames, paramIsNumber,
-│   │                   renderParam, constraintJson, fieldJson)
+│   │                   renderParam, constraintJson, fieldJson); the JSON Schema dialects toDraft07,
+│   │                   toOpenApi30, withRefBase
 │   ├── messages.bp     Arg, arg, noArgs, MessageSource, setMessageSource, builtInOnly, messageSource,
 │   │                   useParseSource, clearParseSource, currentLocale, templateFor, interpolate,
 │   │                   message, builtInTemplate, showI32/I64/F64
@@ -54,11 +56,14 @@ validation/
 │   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument,
 │   │                   typeRestated, transformEach; what `jsonOf<T>` calls: encodeInt, encodeLong,
 │   │                   encodeOptional, encodeArrayOf, encodeSetOf, encodeDictOf, intKeyText, textOfJson,
-│   │                   objectOf, membersOf, tagged (two more conversion cells: floatOfI32, floatOfI64)
+│   │                   objectOf, membersOf, tagged (two more conversion cells: floatOfI32, floatOfI64);
+│   │                   what `jsonSchemaOf<T>` calls: hasDef, textArray, withTag, documentOf,
+│   │                   refsRenamed, refsPrefixed; the JSON writer jsonText, numberText
 │   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
-│   │                   clearConstraints, unknownConstraintMessage, vConstraint   (registry: templates)
+│   │                   clearConstraints, unknownConstraintMessage, vConstraint; registerSchema,
+│   │                   registeredJsonSchemas, clearSchemas   (registries: templates)
 │   ├── formats.bp      the string formats as walks or intersection-grammar regexes: is<Format>(s) for every
 │   │                   format marker, <name>Pattern() per regex format, urlParts, digitsValue (no host cell)
 │   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern,
@@ -75,9 +80,11 @@ validation/
 │                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
 │                       #[orElseOf], #[fallback], #[fallbackOf], #[coerce], #[stringbool], #[trim],
 │                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl], #[message],
-│                       #[typeMessage], #[stopOnFirst], #[preprocess], #[check], #[each]
+│                       #[typeMessage], #[stopOnFirst], #[preprocess], #[check], #[each], #[jsonSchema],
+│                       #[schemaId], #[title], #[describe], #[example], #[deprecated]
 └── test/             binding · checks_and_formats_example · codecs · coercion_and_forms_example · collections_example · constraints ·
-                      enums_and_unions_example · message_order · messages · nested_and_arrays_example ·
+                      enums_and_unions_example · error_views_example · json_schema · json_schema_example ·
+                      message_order · messages · nested_and_arrays_example ·
                       object_policy_example · parity · path · refine_and_messages_example ·
                       transform_and_codec_example ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
@@ -85,7 +92,8 @@ validation/
 ```
 
 `botopink.json`'s `files` order is a dependency order: a module is listed before
-the siblings that import it.
+the siblings that import it (`formats` before `schemas`, which coerces an ISO
+instant; `schemas` before `table` and `spi`, which write JSON Schema).
 
 ## The message source
 
@@ -191,6 +199,10 @@ pub fn decode<TypeName>(text: string) -> @Result<TypeName, ValidationReport>
 pub fn bind<TypeName>(pairs: Array<#(string, string)>) -> @Result<TypeName, ValidationReport>   // a record
 pub fn jsonOf<TypeName>(v: TypeName) -> Json
 pub fn encode<TypeName>(v: TypeName) -> @Result<Json, ValidationReport>
+pub fn schemaNodeOf<TypeName>() -> Json
+pub fn schemaDefsOf<TypeName>(acc: Array<#(string, Json)>) -> Array<#(string, Json)>
+pub fn schemaIdOf<TypeName>() -> string
+pub fn jsonSchemaOf<TypeName>() -> string
 pub fn schemaOf<TypeName>() -> Schema<TypeName>
 pub fn optionsOf<TypeName>() -> Array<string>                                                   // an enum
 ```
@@ -288,6 +300,34 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   its domain (`test/codecs_test.bp`); `millisToIso` writes UTC with milliseconds
   itself, because std's `clock.formatIso8601` answers local time without them
   on erlang.
+- **JSON Schema** (step 9, draft 2020-12). `jsonSchemaOf<TypeName>()` is the
+  document: `$schema` first, the type's node, `$defs` with every other
+  `#[schema]` type it reaches (`schemaDefsOf<…>` by name, so mutual recursion
+  is finite), a reference to the document's own type `{"$ref": "#"}`. A marker
+  becomes its keyword as ZOD_DOCUMENTATION.md § 8.3 maps it (formats,
+  `contentEncoding`, the regex formats' `pattern`, bounds as
+  `minLength`/`minItems`/`minProperties`, `minimum`, `exclusiveMinimum`, …,
+  `#[literal]` as `const`, `#[oneOf]` as `enum`); a `?T` takes `null` into a
+  bare `type`, else `anyOf` with `{"type": "null"}`; `#[present]`, `#[orElse]`
+  (which also writes `default`) and `?T` fields are not `required`;
+  `additionalProperties` is `false` unless `#[stripUnknown]` (absent) or a
+  `#[rest]` field (its value's node). A marker with no keyword (a walk-checked
+  format, a registered constraint, a date bound, `#[check]`, `#[preprocess]`)
+  makes the field `{}`; under `#[jsonSchema]` on the type it is a compile error
+  naming the field and the marker. `#[title]`, `#[describe]`, `#[example]`,
+  `#[deprecated]` on a type or a field are its annotations; `#[schemaId("…")]`
+  is `schemaIdOf<TypeName>()`. `spi.registerSchema(id, jsonSchemaOf<T>)` and
+  `spi.registeredJsonSchemas()` (§ 8.4: `{"schemas": {id: …}}`, each with its
+  `id`, a `$ref` by id); `table.toDraft07`, `table.toOpenApi30` and
+  `table.withRefBase` rewrite a document for another dialect. The emitted code
+  builds the document as `Json` at run time and writes it with
+  `schemas.jsonText` (a number by its digits when whole, the same on both
+  targets).
+- **Error views** (step 9): `report.flatten()` (`Flat(formErrors,
+  fieldErrors)`, keyed by the first path segment), `report.tree()`
+  (`ReportTree(errors, properties, items)`), `report.pretty()` (`✖ message` /
+  `  → at path`). An `unrecognizedKey` is said at the object that holds the key,
+  as Zod reports `unrecognized_keys`.
 - **The checks are `#[validated]`'s.** A type that carries constraint markers
   is also `#[validated]`; the emitted decoder calls `validate<TypeName>` on the
   record it built and re-roots the report under the record's path

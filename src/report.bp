@@ -19,7 +19,8 @@
 //// violations in front of the argument's, so a report built from a record's
 //// fields reads in the order the record declares them.
 
-import {json} from "std";
+import {path.parts, path.parent};
+import {json, collections.Dict} from "std";
 
 // One failed constraint. `code` is the constraint's own name (`notBlank`,
 // `sizeBetween`, an application constraint's `code()`); `message` is the
@@ -96,6 +97,44 @@ pub type ValidationReport(
         );
     }
 
+    // `z.flattenError`: the messages of the document itself — a violation at
+    // the root, or a key the root object does not declare — and, per first
+    // path segment, the messages under that field, in report order.
+    pub fn flatten(self: Self) -> Flat {
+        var form: Array<string> = [];
+        var fields: Dict<string, Array<string>> = Dict.empty();
+        var i = 0;
+        while (i < self.violations.length) {
+            val v = self.violations.at(i);
+            if (v != null) {
+                val ps = parts(locatedAt(v));
+                if (ps.length == 0) form = form.append([v.message]) else {
+                    val head = ps.slice(0, 1).map({ p -> p[1] }).join("");
+                    val before: Array<string> = fields.at(head) ?? [];
+                    fields = fields.insert(head, before.append([v.message]));
+                }
+            }
+            i = i + 1;
+        }
+        return Flat(formErrors: form, fieldErrors: fields);
+    }
+
+    // `z.treeifyError`: the messages placed where the document holds the value
+    // they are about — `properties` by key, `items` by index (an index nothing
+    // was said about is an empty tree).
+    pub fn tree(self: Self) -> ReportTree {
+        return self.violations.fold(
+            ReportTree.none(),
+            { acc, v -> placed(acc, parts(locatedAt(v)), v.message) },
+        );
+    }
+
+    // `z.prettifyError`: `✖ <message>`, then `  → at <path>` when the value
+    // is not the document itself; one violation after another, report order.
+    pub fn pretty(self: Self) -> string {
+        return self.violations.map({ v -> prettyLine(v) }).join("\n");
+    }
+
     pub fn empty() -> ValidationReport {
         val none: Array<Violation> = [];
         return ValidationReport(violations: none);
@@ -144,4 +183,84 @@ pub fn noViolation() -> Array<Violation> {
 
 pub fn oneViolation(v: Violation) -> Array<Violation> {
     return [v];
+}
+
+// ── step 9: the report's views ──────────────────────────────────────────────
+
+pub type Flat(
+    formErrors: Array<string>,
+    fieldErrors: Dict<string, Array<string>>,
+)
+
+pub type ReportTree(
+    errors: Array<string>,
+    properties: Dict<string, ReportTree>,
+    items: Array<ReportTree>,
+) {
+    // The tree of a value nothing was said about.
+    pub fn none() -> ReportTree {
+        val noErrors: Array<string> = [];
+        val noItems: Array<ReportTree> = [];
+        return ReportTree(
+            errors: noErrors,
+            properties: Dict.empty(),
+            items: noItems,
+        );
+    }
+}
+
+// Where a violation is said: at its own path, except an undeclared key, which
+// is a fault of the object holding it (Zod reports `unrecognized_keys` there).
+fn locatedAt(v: Violation) -> string {
+    if (v.code == "unrecognizedKey") return parent(v.field);
+    return v.field;
+}
+
+fn prettyLine(v: Violation) -> string {
+    val at = locatedAt(v);
+    if (at == "") return "✖ " + v.message;
+    return "✖ " + v.message + "\n  → at " + at;
+}
+
+fn placed(
+    tree: ReportTree,
+    ps: Array<#(bool, string)>,
+    message: string,
+) -> ReportTree {
+    if (ps.length == 0)
+        return ReportTree(
+            errors: tree.errors.append([message]),
+            properties: tree.properties,
+            items: tree.items,
+        );
+    val head = ps.slice(0, 1);
+    val rest = ps.slice(1, ps.length);
+    val isIndex = head.map({ p -> p[0] }).filter({ b -> b }).length > 0;
+    val name = head.map({ p -> p[1] }).join("");
+    if (isIndex) {
+        val at = name
+            .split("")
+            .fold(0, { acc, c -> acc * 10 + "0123456789".indexOf(c) });
+        var items = tree.items;
+        while (items.length <= at) {
+            items = items.append([ReportTree.none()]);
+        }
+        val child = items.at(at) ?? ReportTree.none();
+        val updated = placed(child, rest, message);
+        val replaced = items
+            .slice(0, at)
+            .append([updated])
+            .append(items.slice(at + 1, items.length));
+        return ReportTree(
+            errors: tree.errors,
+            properties: tree.properties,
+            items: replaced,
+        );
+    }
+    val child = tree.properties.at(name) ?? ReportTree.none();
+    return ReportTree(
+        errors: tree.errors,
+        properties: tree.properties.insert(name, placed(child, rest, message)),
+        items: tree.items,
+    );
 }

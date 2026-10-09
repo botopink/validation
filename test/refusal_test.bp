@@ -396,6 +396,32 @@ pub type Bad(
     );
 }
 
+// ── step 9: JSON Schema ─────────────────────────────────────────────────────
+
+test "validation: under #[jsonSchema] a marker with no keyword is refused, naming the field" {
+    val out = checked(
+        "schema_json_schema_unrepresentable",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.validated, decorators.jsonSchema, decorators.creditCard} from "validation";
+import {constraints.vCreditCard, table.constraintTableJson} from "validation";
+
+#[schema]
+#[validated]
+#[jsonSchema]
+pub type Bad(
+    #[creditCard] card: string,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[jsonSchema] on `Bad`: field `card`: #[creditCard] has no JSON Schema keyword - remove #[jsonSchema] or the marker",
+        "7:3",
+    );
+}
+
 // ── every marker on a field type it cannot check ────────────────────────────
 //
 // One row per marker of `decorators.markerNames()`: the marker, its arguments

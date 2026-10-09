@@ -1,0 +1,166 @@
+//// validation — `jsonSchemaOf<T>` against ZOD_DOCUMENTATION.md § 8's own
+//// documents (front 125 step 9), key order aside: each literal is the
+//// reference's, and a node is compared to it as JSON (`sameJson`), members in
+//// any order. A document is `$schema` plus the reference's object; a format,
+//// a nullability or a metadata case is the node of one field.
+
+import {decorators.schema, decorators.validated, decorators.email, decorators.isoDatetime, decorators.isoDate, decorators.isoDuration};
+import {decorators.ipv4, decorators.ipv6, decorators.uuid, decorators.guid, decorators.url, decorators.base64, decorators.minLength};
+import {decorators.title, decorators.describe};
+import {schemas};
+import {schemas.Schema, report.ValidationReport, report.Violation, table, table.constraintTableJson};
+import {constraints.vEmail, constraints.vIsoDatetime, constraints.vIsoDate, constraints.vIsoDuration, constraints.vIpv4, constraints.vIpv6};
+import {constraints.vUuid, constraints.vGuid, constraints.vUrl, constraints.vBase64, constraints.vMinLength};
+import {json, json.Json} from "std";
+
+fn sameJson(a: Json, b: Json) -> bool {
+    return case a {
+        Obj(am) -> sameMembers(am, b.members()) && b.isObject();
+        Arr(ai) -> sameItems(ai, b.items()) && b.kindName() == "an array";
+        _ -> schemas.jsonText(a) == schemas.jsonText(b);
+    };
+}
+
+fn sameMembers(am: Array<#(string, Json)>, bm: Array<#(string, Json)>) -> bool {
+    if (am.length != bm.length) return false;
+    return am.filter({ m ->
+        bm.filter({ n -> n[0] == m[0] && sameJson(m[1], n[1]) }).length == 0;
+    }).length
+        == 0;
+}
+
+fn sameItems(ai: Array<Json>, bi: Array<Json>) -> bool {
+    if (ai.length != bi.length) return false;
+    var i = 0;
+    var same = true;
+    while (i < ai.length) {
+        if (sameJson(ai.at(i) ?? Json.Null, bi.at(i) ?? Json.Null) == false)
+            same = false;
+        i = i + 1;
+    }
+    return same;
+}
+
+fn parsed(text: string) -> Json {
+    return try json.decode(text) catch Json.Str("not JSON");
+}
+
+fn withoutSchema(doc: string) -> Json {
+    return Json.Obj(parsed(doc).members().filter({ m -> m[0] != "$schema" }));
+}
+
+fn fieldNode(doc: string, name: string) -> Json {
+    val props = parsed(doc).field("properties") ?? Json.Null;
+    return props.field(name) ?? Json.Null;
+}
+
+// § 8.2 `z.object({ name: z.string(), age: z.number() })`
+#[schema]
+pub type Person(name: string, age: f64)
+
+// § 8.2 `cycles`: `z.object({ name: z.string(), get friend() { return User } })`
+#[schema]
+pub type Friend(name: string, friend: Friend)
+
+// § 8.3 String Formats, Nullability, and § 8.2 `metadata`
+#[schema]
+#[validated]
+pub type Formats(
+    #[email] email: string,
+    #[isoDatetime] at: string,
+    #[isoDate] day: string,
+    #[isoDuration] span: string,
+    #[ipv4] v4: string,
+    #[ipv6] v6: string,
+    #[uuid] id: string,
+    #[guid] guid: string,
+    #[url] link: string,
+    #[base64] blob: string,
+    plain: ?string,
+    #[minLength(5)] short: ?string,
+    #[title("Email address")] #[describe("Your email address")] contact: string,
+)
+
+test "validation: an object is the reference's document (§ 8.2)" {
+    assert sameJson(
+        withoutSchema(jsonSchemaOfPerson()),
+        parsed(
+            """{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "number"}}, "required": ["name", "age"], "additionalProperties": false}""",
+        ),
+    );
+    assert jsonSchemaOfPerson().startsWith(
+        "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",",
+    );
+}
+
+test "validation: a recursive object refers to the root (§ 8.2 cycles)" {
+    assert sameJson(
+        withoutSchema(jsonSchemaOfFriend()),
+        parsed(
+            """{"type": "object", "properties": {"name": {"type": "string"}, "friend": {"$ref": "#"}}, "required": ["name", "friend"], "additionalProperties": false}""",
+        ),
+    );
+}
+
+test "validation: the string formats are the reference's nodes (§ 8.3)" {
+    val doc = jsonSchemaOfFormats();
+    val expected: Array<#(string, string)> = [
+        #("email", """{"type": "string", "format": "email"}"""),
+        #("at", """{"type": "string", "format": "date-time"}"""),
+        #("day", """{"type": "string", "format": "date"}"""),
+        #("span", """{"type": "string", "format": "duration"}"""),
+        #("v4", """{"type": "string", "format": "ipv4"}"""),
+        #("v6", """{"type": "string", "format": "ipv6"}"""),
+        #("id", """{"type": "string", "format": "uuid"}"""),
+        #("guid", """{"type": "string", "format": "uuid"}"""),
+        #("link", """{"type": "string", "format": "uri"}"""),
+        #("blob", """{"type": "string", "contentEncoding": "base64"}"""),
+    ];
+    val wrong = expected.filter(
+        { e -> sameJson(fieldNode(doc, e[0]), parsed(e[1])) == false },
+    );
+    assert wrong.map({ e -> e[0] }).join(",") == "";
+}
+
+test "validation: nullability is the reference's (§ 8.3)" {
+    val doc = jsonSchemaOfFormats();
+    assert sameJson(
+        fieldNode(doc, "plain"),
+        parsed("""{"type": ["string", "null"]}"""),
+    );
+    assert sameJson(
+        fieldNode(doc, "short"),
+        parsed(
+            """{"anyOf": [{"type": "string", "minLength": 5}, {"type": "null"}]}""",
+        ),
+    );
+}
+
+test "validation: metadata is the reference's annotations (§ 8.2 metadata)" {
+    assert sameJson(
+        fieldNode(jsonSchemaOfFormats(), "contact"),
+        parsed(
+            """{"type": "string", "title": "Email address", "description": "Your email address"}""",
+        ),
+    );
+}
+
+#[schema]
+pub type Post(title: string, author: Writer)
+
+#[schema]
+pub type Writer(name: string, posts: Array<Post>)
+
+test "validation: another type is a $def, and draft-07 calls them definitions" {
+    val doc = jsonSchemaOfPost();
+    assert sameJson(
+        withoutSchema(doc),
+        parsed(
+            """{"type": "object", "properties": {"title": {"type": "string"}, "author": {"$ref": "#/$defs/Writer"}}, "required": ["title", "author"], "additionalProperties": false,
+                "$defs": {"Writer": {"type": "object", "properties": {"name": {"type": "string"}, "posts": {"type": "array", "items": {"$ref": "#"}}}, "required": ["name", "posts"], "additionalProperties": false}}}""",
+        ),
+    );
+    val draft7 = table.toDraft07(doc);
+    assert draft7.contains("\"definitions\":{\"Writer\":");
+    assert draft7.contains("\"$ref\":\"#/definitions/Writer\"");
+}

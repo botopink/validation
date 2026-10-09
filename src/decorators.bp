@@ -53,7 +53,7 @@
 //// be null. That is the failure mode this module exists to design out, and it
 //// is designed out at compile time.
 
-import {formats.isIsoDatetimeOffset};
+import {formats.isIsoDatetimeOffset, formats.nanoidPattern, formats.cuid2Pattern, formats.ulidPattern, formats.e164Pattern};
 import {json.Json} from "std";
 
 // ── `#[validated]` ──────────────────────────────────────────────────────────
@@ -1717,6 +1717,430 @@ fn encEnum(name: string, variants: Array<string>, tag: string) -> string {
         + "(v);\n}\n";
 }
 
+// ── JSON Schema (step 9) ────────────────────────────────────────────────────
+//
+// `#[schema]` emits, beside the decoder, the type's JSON Schema (draft
+// 2020-12) as `Json` built by the emitted code — `schemaNodeOf<TypeName>()`
+// the type's own node, `schemaDefsOf<TypeName>(acc)` the nodes of every type it
+// reaches, `jsonSchemaOf<TypeName>()` the document (`schemas.documentOf`): a
+// field of another `#[schema]` type is `{"$ref": "#/$defs/<Name>"}`, of the
+// document's own type `{"$ref": "#"}`, so recursion is finite. A marker becomes
+// its keyword (ZOD_DOCUMENTATION.md § 8.3: a format, `contentEncoding`, a
+// `pattern`, a bound); one with no keyword — a registered constraint, a date
+// bound, a walk-checked format, a rule — is unrepresentable: under
+// `#[jsonSchema]` on the type a compile error naming the field and the marker,
+// without it the field's node is `{}` (Zod's `unrepresentable: "any"`).
+
+fn jsText(s: string) -> string {
+    return "\"" + s.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"") + "\"";
+}
+
+fn jsStr(s: string) -> string {
+    return "Json.Str(" + jsText(s) + ")";
+}
+
+fn jsKw(name: string, value: string) -> string {
+    return "#(" + jsText(name) + ", " + value + ")";
+}
+
+fn jsObj(members: Array<string>) -> string {
+    return "Json.Obj([" + members.join(", ") + "])";
+}
+
+fn jsArr(items: Array<string>) -> string {
+    return "Json.Arr([" + items.join(", ") + "])";
+}
+
+fn jsNum(lexeme: string) -> string {
+    return "Json.Num(" + asF64(lexeme) + ")";
+}
+
+// `s` as a regular expression that matches it literally.
+fn regexEscaped(s: string) -> string {
+    val special = "\\^$.|?*+()[]{}/";
+    return s
+        .split("")
+        .map({ c -> if (special.indexOf(c) >= 0) "\\" + c else c })
+        .join("");
+}
+
+// A literal lexeme as the `Json` it is: text, a boolean or a number.
+fn literalJson(l: string) -> string {
+    if (l.startsWith("\"")) return jsStr(unquoted(l));
+    if (l == "true" || l == "false") return "Json.Bool(" + l + ")";
+    return jsNum(l);
+}
+
+fn formatOf(n: string) -> string {
+    if (n == "email"
+        || n == "emailHtml5"
+        || n == "emailRfc5322"
+        || n == "emailUnicode")
+        return "email";
+    if (n == "uuid" || n == "guid" || n == "uuidV") return "uuid";
+    if (n == "url" || n == "httpUrl") return "uri";
+    if (n == "hostname") return "hostname";
+    if (n == "ipv4") return "ipv4";
+    if (n == "ipv6") return "ipv6";
+    if (n == "isoDate") return "date";
+    if (n == "isoDatetime" || n == "isoDatetimeOffset") return "date-time";
+    if (n == "isoDuration") return "duration";
+    return "";
+}
+
+fn patternOf(n: string) -> string {
+    if (n == "nanoid") return nanoidPattern();
+    if (n == "cuid2") return cuid2Pattern();
+    if (n == "ulid") return ulidPattern();
+    if (n == "e164") return e164Pattern();
+    if (n == "notBlank") return "\\S";
+    return "";
+}
+
+// The keywords one marker adds to the node of a value of type `t`; a single
+// `"!"`-led element when it has none.
+fn markerKeywords(n: string, args: Array<string>, t: string) -> Array<string> {
+    val first = args.slice(0, 1).join("");
+    val second = args.slice(1, 2).join("");
+    val text = t == "string";
+    val list = schemaIsList(t) || schemaIsSet(t);
+    val dict = schemaIsDict(t);
+    val minKey = if (text)
+        "minLength"
+    else if (dict)
+        "minProperties"
+    else
+        "minItems";
+    val maxKey = if (text)
+        "maxLength"
+    else if (dict)
+        "maxProperties"
+    else
+        "maxItems";
+    val none: Array<string> = [];
+    if (n == "minLength") return [jsKw(minKey, jsNum(first))];
+    if (n == "maxLength") return [jsKw(maxKey, jsNum(first))];
+    if (n == "length")
+        return [jsKw(minKey, jsNum(first)), jsKw(maxKey, jsNum(first))];
+    if (n == "sizeBetween")
+        return [jsKw(minKey, jsNum(first)), jsKw(maxKey, jsNum(second))];
+    if (n == "notEmpty") return [jsKw(minKey, jsNum("1"))];
+    if (n == "notNull") return none;
+    if (n == "minValue") return [jsKw("minimum", jsNum(first))];
+    if (n == "maxValue") return [jsKw("maximum", jsNum(first))];
+    if (n == "positive") return [jsKw("exclusiveMinimum", jsNum("0"))];
+    if (n == "positiveOrZero") return [jsKw("minimum", jsNum("0"))];
+    if (n == "negative") return [jsKw("exclusiveMaximum", jsNum("0"))];
+    if (n == "negativeOrZero") return [jsKw("maximum", jsNum("0"))];
+    if (n == "gt") return [jsKw("exclusiveMinimum", jsNum(first))];
+    if (n == "lt") return [jsKw("exclusiveMaximum", jsNum(first))];
+    if (n == "multipleOf") return [jsKw("multipleOf", jsNum(first))];
+    if (n == "safeInt")
+        return [
+            jsKw("minimum", jsNum("-9007199254740991")),
+            jsKw("maximum", jsNum("9007199254740991")),
+        ];
+    if (n == "float32")
+        return [
+            jsKw("minimum", "Json.Num(-3.4028234663852886e38)"),
+            jsKw("maximum", "Json.Num(3.4028234663852886e38)"),
+        ];
+    if (n == "pattern") return [jsKw("pattern", jsStr(unquoted(first)))];
+    if (n == "startsWith")
+        return [jsKw("pattern", jsStr("^" + regexEscaped(unquoted(first))))];
+    if (n == "endsWith")
+        return [jsKw("pattern", jsStr(regexEscaped(unquoted(first)) + "$"))];
+    if (n == "includes")
+        return [jsKw("pattern", jsStr(regexEscaped(unquoted(first))))];
+    if (n == "base64") return [jsKw("contentEncoding", jsStr("base64"))];
+    if (n == "literal") {
+        val value = if (first.startsWith("\""))
+            jsStr(unquoted(first))
+        else if (first == "true" || first == "false")
+            "Json.Bool(" + first + ")"
+        else
+            jsNum(first);
+        return [jsKw("const", value)];
+    }
+    if (n == "oneOf")
+        return [
+            jsKw(
+                "enum",
+                jsArr(unquoted(first).split(",").map({ o -> jsStr(o) })),
+            ),
+        ];
+    val format = formatOf(n);
+    if (format != "") return [jsKw("format", jsStr(format))];
+    val pattern = patternOf(n);
+    if (pattern != "") return [jsKw("pattern", jsStr(pattern))];
+    if (schemaIsMarker(n) || n == "check" || n == "preprocess")
+        return ["!#[" + n + "] has no JSON Schema keyword"];
+    return none;
+}
+
+// The node of a type with no markers, as its members.
+fn typeKeywords(t: string, owner: string) -> Array<string> {
+    if (t == "string") return [jsKw("type", jsStr("string"))];
+    if (t == "i32" || t == "i64") return [jsKw("type", jsStr("integer"))];
+    if (t == "f64") return [jsKw("type", jsStr("number"))];
+    if (t == "bool") return [jsKw("type", jsStr("boolean"))];
+    val none: Array<string> = [];
+    if (t == "Json") return none;
+    if (t.startsWith("?"))
+        return nullableKeywords(typeKeywords(t.slice(1, t.length()), owner));
+    if (schemaIsDeclared(t)) return [jsKw("$ref", jsStr("#/$defs/" + t))];
+    if (schemaIsUnion(t))
+        return [
+            jsKw(
+                "anyOf",
+                jsArr(
+                    splitTop(t, "|").map(
+                        { a -> jsObj(typeKeywords(a, owner)) },
+                    ),
+                ),
+            ),
+        ];
+    if (schemaIsTuple(t)) {
+        val items = schemaTupleItems(t);
+        val count = [items.length].join("");
+        return [
+            jsKw("type", jsStr("array")),
+            jsKw(
+                "prefixItems",
+                jsArr(items.map({ it -> jsObj(typeKeywords(it, owner)) })),
+            ),
+            jsKw("items", "Json.Bool(false)"),
+            jsKw("minItems", jsNum(count)),
+            jsKw("maxItems", jsNum(count)),
+        ];
+    }
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        val k = kv.slice(0, 1).join("");
+        val v = kv.slice(1, 2).join("");
+        val names = if (k == "i32")
+            [
+                jsKw(
+                    "propertyNames",
+                    jsObj([jsKw("pattern", jsStr("^-?[0-9]+$"))]),
+                ),
+            ]
+        else if (schemaIsDeclared(k))
+            [
+                jsKw(
+                    "propertyNames",
+                    jsObj([jsKw("$ref", jsStr("#/$defs/" + k))]),
+                ),
+            ]
+        else
+            none;
+        return [
+            jsKw("type", jsStr("object")),
+            jsKw("additionalProperties", jsObj(typeKeywords(v, owner))),
+        ].append(names);
+    }
+    val inner = schemaInner(t);
+    if (inner == "") return none;
+    if (schemaIsSet(t))
+        return [
+            jsKw("type", jsStr("array")),
+            jsKw("items", jsObj(typeKeywords(inner, owner))),
+            jsKw("uniqueItems", "Json.Bool(true)"),
+        ];
+    return [
+        jsKw("type", jsStr("array")),
+        jsKw("items", jsObj(typeKeywords(inner, owner))),
+    ];
+}
+
+// `?T`: a node that is a type alone takes `null` into its type; one with more
+// to say is `anyOf` with `{"type": "null"}` (§ 8.3 Nullability).
+fn nullableKeywords(members: Array<string>) -> Array<string> {
+    if (members.length == 0) return members;
+    val only = members.slice(0, 1).join("");
+    val head = "#(\"type\", Json.Str(";
+    if (members.length == 1 && only.startsWith(head)) {
+        val name = only.slice(head.length(), only.length() - 2);
+        return [jsKw("type", jsArr(["Json.Str(" + name + ")", jsStr("null")]))];
+    }
+    return [
+        jsKw(
+            "anyOf",
+            jsArr([jsObj(members), jsObj([jsKw("type", jsStr("null"))])]),
+        ),
+    ];
+}
+
+// Every `#[schema]` type a type names, for its `$defs`.
+fn referencedTypes(t: string) -> Array<string> {
+    val none: Array<string> = [];
+    if (schemaIsBuiltin(t)) return none;
+    if (t.startsWith("?")) return referencedTypes(t.slice(1, t.length()));
+    if (schemaIsDeclared(t)) return [t];
+    if (schemaIsUnion(t))
+        return splitTop(t, "|")
+            .map({ a -> referencedTypes(a) })
+            .fold(none, { acc, xs -> acc.append(xs) });
+    if (schemaIsTuple(t))
+        return schemaTupleItems(t)
+            .map({ a -> referencedTypes(a) })
+            .fold(none, { acc, xs -> acc.append(xs) });
+    if (schemaIsDict(t))
+        return schemaArgs(t)
+            .map({ a -> referencedTypes(a) })
+            .fold(none, { acc, xs -> acc.append(xs) });
+    val inner = schemaInner(t);
+    if (inner == "") return none;
+    return referencedTypes(inner);
+}
+
+fn metaKeywords(annotations: Array<DeclAnnotation>) -> Array<string> {
+    var out: Array<string> = [];
+    annotations.forEach({ a ->
+        val first = unquoted(a.args.slice(0, 1).join(""));
+        if (a.name == "title") out.push(jsKw("title", jsStr(first)));
+        if (a.name == "describe") out.push(jsKw("description", jsStr(first)));
+        if (a.name == "example")
+            out.push(jsKw("examples", jsArr([jsStr(first)])));
+        if (a.name == "deprecated")
+            out.push(jsKw("deprecated", "Json.Bool(true)"));
+    });
+    return out;
+}
+
+// A record field's node: its type's keywords, its markers' (an `#[each]`
+// marker's on the items), `required` of an `#[exhaustive]` dict, the `default`
+// of an `#[orElse]`, `null` for a `?T` that is not `#[present]`, and its
+// metadata; `"!" + why` when a marker has no keyword.
+fn fieldNode(
+    declared: string,
+    annotations: Array<DeclAnnotation>,
+    owner: string,
+    isPresent: bool,
+    hasDefault: bool,
+    orElseLexeme: string,
+    exhaustive: bool,
+) -> string {
+    val nodeType = if (declared.startsWith("?"))
+        declared.slice(1, declared.length())
+    else
+        declared;
+    val eachMarkers = annotations.filter({ a -> a.name == "each" });
+    val itemType = if (schemaIsList(nodeType))
+        schemaItemOf(nodeType)
+    else if (schemaIsSet(nodeType))
+        schemaArgs(nodeType).slice(0, 1).join("")
+    else
+        "";
+    var keywords = typeKeywords(nodeType, owner);
+    if (eachMarkers.length > 0 && itemType != "") {
+        var items = typeKeywords(itemType, owner);
+        eachMarkers.forEach({ a ->
+            items = items.append(
+                markerKeywords(unquoted(a.args.join("")), [], itemType),
+            );
+        });
+        val itemMissing = items.filter({ k -> k.startsWith("!") });
+        if (itemMissing.length > 0) return itemMissing.slice(0, 1).join("");
+        keywords = keywords
+            .filter({ k -> k.startsWith("#(\"items\"") == false })
+            .append([jsKw("items", jsObj(items))]);
+    }
+    annotations.forEach({ a ->
+        if (a.name != "each")
+            keywords = keywords.append(
+                markerKeywords(a.name, a.args, nodeType),
+            );
+    });
+    val missing = keywords.filter({ k -> k.startsWith("!") });
+    if (missing.length > 0) return missing.slice(0, 1).join("");
+    if (exhaustive && schemaIsDict(nodeType))
+        keywords = keywords.append(
+            [
+                jsKw(
+                    "required",
+                    "schemas.textArray(optionsOf"
+                        + schemaArgs(nodeType).slice(0, 1).join("")
+                        + "())",
+                ),
+            ],
+        );
+    if (hasDefault)
+        keywords = keywords.append(
+            [jsKw("default", literalJson(orElseLexeme))],
+        );
+    val shaped = if (declared.startsWith("?") && isPresent == false)
+        nullableKeywords(keywords)
+    else
+        keywords;
+    return jsObj(shaped.append(metaKeywords(annotations)));
+}
+
+// The functions of a type's JSON Schema, from its node's text and the types it
+// reaches.
+fn schemaDocFns(
+    name: string,
+    node: string,
+    refs: Array<string>,
+    annotations: Array<DeclAnnotation>,
+) -> string {
+    val ids = annotations
+        .filter({ a -> a.name == "schemaId" })
+        .map({ a -> unquoted(a.args.join("")) });
+    val id = if (ids.length > 0) ids.join("") else name;
+    var steps: Array<string> = [];
+    var i = 0;
+    val unique = refs.filter({ r -> r != name });
+    while (i < unique.length) {
+        val r = unique.slice(i, i + 1).join("");
+        steps.push(
+            "    val __a"
+                + [i + 1].join("")
+                + " = schemaDefsOf"
+                + r
+                + "(__a"
+                + [i].join("")
+                + ");",
+        );
+        i = i + 1;
+    }
+    val stepText = if (steps.length > 0) steps.join("\n") + "\n" else "";
+    return "pub fn schemaNodeOf"
+        + name
+        + "() -> Json {\n    return "
+        + node
+        + ";\n}\n"
+        + "pub fn schemaDefsOf"
+        + name
+        + "(acc: Array<#(string, Json)>) -> Array<#(string, Json)> {\n"
+        + "    if (schemas.hasDef(acc, \""
+        + name
+        + "\")) { return acc; }\n"
+        + "    val __a0 = acc.append([#(\""
+        + name
+        + "\", schemaNodeOf"
+        + name
+        + "())]);\n"
+        + stepText
+        + "    return __a"
+        + [unique.length].join("")
+        + ";\n}\n"
+        + "pub fn schemaIdOf"
+        + name
+        + "() -> string {\n    return "
+        + jsText(id)
+        + ";\n}\n"
+        + "pub fn jsonSchemaOf"
+        + name
+        + "() -> string {\n    return schemas.documentOf(\""
+        + name
+        + "\", schemaNodeOf"
+        + name
+        + "(), schemaDefsOf"
+        + name
+        + "([]));\n}\n";
+}
+
 fn schemaIsMarker(name: string) -> bool {
     return markerNames().indexOf(name) >= 0;
 }
@@ -1939,10 +2363,42 @@ pub fn schema(comptime decl: @Decl) {
     else
         "";
     val isEnum = decl.variants.length > 0;
+    val enumNode = if (tag == "")
+        jsObj(
+            [
+                jsKw("type", jsStr("string")),
+                jsKw("enum", jsArr(decl.variants.map({ v -> jsStr(v) }))),
+            ].append(metaKeywords(decl.annotations)),
+        )
+    else
+        jsObj(
+            [
+                jsKw(
+                    "oneOf",
+                    jsArr(
+                        decl.variants.map({ v ->
+                            "schemas.withTag(schemaNodeOf"
+                                + decl.name
+                                + v
+                                + "(), "
+                                + jsText(tag)
+                                + ", "
+                                + jsText(v)
+                                + ")";
+                        }),
+                    ),
+                ),
+            ].append(metaKeywords(decl.annotations)),
+        );
+    val enumRefs = if (tag == "")
+        []
+    else
+        decl.variants.map({ v -> decl.name + v });
     if (isEnum)
         @emit(
             schemaEnum(decl.name, decl.variants, tag)
                 + encEnum(decl.name, decl.variants, tag)
+                + schemaDocFns(decl.name, enumNode, enumRefs, decl.annotations)
                 + schemaCommon(decl.name),
         );
     if (isEnum == false && tag != "")
@@ -1960,6 +2416,14 @@ pub fn schema(comptime decl: @Decl) {
     var hints: Array<string> = [];
     var encMembers: Array<string> = [];
     var encRest = "";
+    var properties: Array<string> = [];
+    var requiredNames: Array<string> = [];
+    var refs: Array<string> = [];
+    var restNode = "";
+    val strictSchema = decl.annotations.filter(
+        { a -> a.name == "jsonSchema" },
+    ).length
+        > 0;
     var problem = "";
     var marked = false;
     var rests = 0;
@@ -2236,6 +2700,42 @@ pub fn schema(comptime decl: @Decl) {
             );
         }
         if (outer != "") call = outer + "(" + source + ", " + path + ")";
+        // The field's JSON Schema node.
+        val nodeText = fieldNode(
+            declared,
+            f.annotations,
+            decl.name,
+            isPresent,
+            orElseLexeme != "" && orElse.startsWith("!") == false,
+            orElseLexeme,
+            exhaustive,
+        );
+        if (strictSchema && nodeText.startsWith("!"))
+            problem = "#[jsonSchema] on `"
+                + decl.name
+                + "`: field `"
+                + f.name
+                + "`: "
+                + nodeText.slice(1, nodeText.length())
+                + " - remove #[jsonSchema] or the marker";
+        val node = if (nodeText.startsWith("!"))
+            jsObj(metaKeywords(f.annotations))
+        else
+            nodeText;
+        refs = refs.append(referencedTypes(declared));
+        if (isRest)
+            restNode = jsObj(
+                typeKeywords(
+                    schemaArgs(declared).slice(1, 2).join(""),
+                    decl.name,
+                ),
+            );
+        if (isRest == false) properties.push(jsKw(f.name, node));
+        val optionalKey = declared.startsWith("?")
+            || isPresent
+            || isRest
+            || orElse != "";
+        if (optionalKey == false) requiredNames.push(jsStr(f.name));
         val typeMessage = f.annotations
             .filter({ a -> a.name == "typeMessage" })
             .map({ a -> a.args.join("") })
@@ -2372,6 +2872,23 @@ pub fn schema(comptime decl: @Decl) {
             + "]), \"\");\n}\n"
             + schemaCommon(decl.name);
     if (recordText != "") @emit(recordText);
+    val closed = if (strip)
+        []
+    else if (rests > 0)
+        [jsKw("additionalProperties", restNode)]
+    else
+        [jsKw("additionalProperties", "Json.Bool(false)")];
+    val recordNode = jsObj(
+        [
+            jsKw("type", jsStr("object")),
+            jsKw("properties", jsObj(properties)),
+            jsKw("required", jsArr(requiredNames)),
+        ]
+            .append(closed)
+            .append(metaKeywords(decl.annotations)),
+    );
+    if (isEnum == false)
+        @emit(schemaDocFns(decl.name, recordNode, refs, decl.annotations));
     if (problem != "") decl.fail(problem);
     if (marked && validated == false)
         decl.fail(
@@ -2556,4 +3073,62 @@ pub fn check<T>(comptime decl: @Decl<T>, comptime rule: fn(v: T) -> bool) {
 // is no marker is refused by `#[validated]`.
 pub fn each(comptime decl: @Decl, comptime marker: string) {
     if (decl.kind != DeclKind.Field) decl.fail("#[each] must annotate a field");
+}
+
+// ── step 9: metadata and the JSON Schema ────────────────────────────────────
+//
+// `.meta({ title, description, examples, deprecated })` on a type or a field:
+// annotations of its JSON Schema node. `#[schema]` reads them.
+
+pub fn title(comptime decl: @Decl, comptime text: string) {
+    if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
+        decl.fail("#[title] must annotate a type or a field");
+    val problem = metaTextProblem("title", text);
+    if (problem != "") decl.fail(problem);
+}
+
+pub fn describe(comptime decl: @Decl, comptime text: string) {
+    if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
+        decl.fail("#[describe] must annotate a type or a field");
+    val problem = metaTextProblem("describe", text);
+    if (problem != "") decl.fail(problem);
+}
+
+pub fn example(comptime decl: @Decl, comptime text: string) {
+    if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
+        decl.fail("#[example] must annotate a type or a field");
+    val problem = metaTextProblem("example", text);
+    if (problem != "") decl.fail(problem);
+}
+
+pub fn deprecated(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
+        decl.fail("#[deprecated] must annotate a type or a field");
+}
+
+// The id a registry knows the type by — `schemaIdOf<TypeName>()`, what
+// `spi.registerSchema` is handed; the type's name when it carries none.
+pub fn schemaId(comptime decl: @Decl, comptime id: string) {
+    if (decl.kind != DeclKind.Type)
+        decl.fail("#[schemaId] must annotate a type");
+    val problem = metaTextProblem("schemaId", id);
+    if (problem != "") decl.fail(problem);
+}
+
+// `unrepresentable: "throw"`: every field of the type has a JSON Schema
+// keyword for each of its markers, or the type is refused, naming the field.
+pub fn jsonSchema(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Type)
+        decl.fail("#[jsonSchema] must annotate a type");
+}
+
+// Metadata text is written into emitted source: a `"` or a `\` would have to
+// be escaped twice over, and is refused instead.
+fn metaTextProblem(marker: string, text: string) -> string {
+    if (text == "") return "#[" + marker + "]: the text may not be empty";
+    if (text.indexOf("\"") >= 0 || text.indexOf("\\") >= 0)
+        return "#["
+            + marker
+            + "]: the text may not contain a double quote or a backslash";
+    return "";
 }

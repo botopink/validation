@@ -944,3 +944,123 @@ pub fn tagged(payload: Json, tag: string, variant: string) -> Json {
 pub fn transformEach(items: Array<string>, ops: string) -> Array<string> {
     return items.map({ x -> transformText(x, ops) });
 }
+
+// ── step 9: the JSON Schema document ────────────────────────────────────────
+
+pub fn hasDef(defs: Array<#(string, Json)>, name: string) -> bool {
+    return defs.filter({ d -> d[0] == name }).length > 0;
+}
+
+pub fn textArray(texts: Array<string>) -> Json {
+    return Json.Arr(texts.map({ t -> Json.Str(t) }));
+}
+
+// A tagged enum's variant: its payload record's node with the tag member — a
+// `const` of the variant's name — first and required.
+pub fn withTag(node: Json, tag: string, variant: string) -> Json {
+    val tagNode = Json.Obj([#("const", Json.Str(variant))]);
+    return Json.Obj(node.members().map({ m -> retagged(m, tag, tagNode) }));
+}
+
+fn retagged(m: #(string, Json), tag: string, tagNode: Json) -> #(string, Json) {
+    if (m[0] == "properties")
+        return #(m[0], Json.Obj([#(tag, tagNode)].append(m[1].members())));
+    if (m[0] == "required")
+        return #(m[0], Json.Arr([Json.Str(tag)].append(m[1].items())));
+    return m;
+}
+
+// The document of the type `name`: its node with `$schema` first and `$defs`
+// last — every type it reaches but itself — and every `$ref` to itself written
+// `#`, the document's root (ZOD_DOCUMENTATION.md § 8.2, `cycles`).
+pub fn documentOf(
+    name: string,
+    node: Json,
+    defs: Array<#(string, Json)>,
+) -> string {
+    val own = "#/$defs/" + name;
+    val others = defs
+        .filter({ d -> d[0] != name })
+        .map({ d ->
+            #(d[0], refsRenamed(d[1], own, "#"));
+        });
+    val head: Array<#(string, Json)> = [
+        #("$schema", Json.Str("https://json-schema.org/draft/2020-12/schema")),
+    ];
+    val body = refsRenamed(node, own, "#").members();
+    val tail: Array<#(string, Json)> = if (others.length > 0)
+        [#("$defs", Json.Obj(others))]
+    else
+        [];
+    return jsonText(Json.Obj(head.append(body).append(tail)));
+}
+
+// `node` with every `"$ref": old` written `"$ref": new`.
+pub fn refsRenamed(node: Json, old: string, new: string) -> Json {
+    return case node {
+        Arr(items) -> Json.Arr(items.map({ i -> refsRenamed(i, old, new) }));
+        Obj(members) -> Json.Obj(
+            members.map({ m -> memberRenamed(m, old, new) }),
+        );
+        _ -> node;
+    };
+}
+
+fn memberRenamed(
+    m: #(string, Json),
+    old: string,
+    new: string,
+) -> #(string, Json) {
+    if (m[0] == "$ref" && textOf(m[1]) == old) return #(m[0], Json.Str(new));
+    return #(m[0], refsRenamed(m[1], old, new));
+}
+
+// ── writing JSON ────────────────────────────────────────────────────────────
+
+// A document as JSON text: members in order, no whitespace, a number by
+// `numberText`.
+pub fn jsonText(j: Json) -> string {
+    return case j {
+        Null -> "null";
+        Bool(value) -> if (value) "true" else "false";
+        Num(value) -> numberText(value);
+        Str(value) -> json.quote(value);
+        Arr(items) -> json.array(items.map({ i -> jsonText(i) }));
+        Obj(members) -> json.object(
+            members.map({ m -> #(m[0], jsonText(m[1])) }),
+        );
+    };
+}
+
+// The shortest text that reads back as `n`, the same on both targets: a whole
+// number within ±(2^53 − 1) by its digits, any other by the host's shortest
+// round-trip rendering.
+pub fn numberText(n: f64) -> string {
+    val whole = isWhole(n)
+        && n <= 9007199254740991.0
+        && n >= -9007199254740991.0;
+    if (whole) return [wholeI64(n)].join("");
+    return [n].join("");
+}
+
+// `node` with every `"$ref"` that starts with `old` starting with `new`.
+pub fn refsPrefixed(node: Json, old: string, new: string) -> Json {
+    return case node {
+        Arr(items) -> Json.Arr(items.map({ i -> refsPrefixed(i, old, new) }));
+        Obj(members) -> Json.Obj(
+            members.map({ m -> memberPrefixed(m, old, new) }),
+        );
+        _ -> node;
+    };
+}
+
+fn memberPrefixed(
+    m: #(string, Json),
+    old: string,
+    new: string,
+) -> #(string, Json) {
+    val text = textOf(m[1]);
+    if (m[0] == "$ref" && text.startsWith(old))
+        return #(m[0], Json.Str(new + text.slice(old.length(), text.length())));
+    return #(m[0], refsPrefixed(m[1], old, new));
+}
