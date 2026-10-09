@@ -141,3 +141,19 @@ test "validation: an unknown tag names the tags that exist" {
     };
     assert message == "status:invalidValue";
 }
+
+test "validation: an enum and a tagged enum encode as they decode" {
+    val c = try decodeCatch(
+        """{"fish": "Trout", "unit": "kg", "gear": "net", "tagId": "x"}""",
+    );
+    val again = try parseCatch(try encodeCatch(c));
+    assert again.fish == Fish.Trout;
+    assert again.tagId is string;
+    val reply = try decodeReply("""{"status": "Failed", "error": "boom"}""");
+    val back = try parseReply(try encodeReply(reply));
+    val text = case back {
+        Success(value) -> value.data;
+        Failed(value) -> value.error;
+    };
+    assert text == "boom";
+}

@@ -21,6 +21,7 @@
 //// does not widen to `i64` in arithmetic, so `#[minValue]`/`#[maxValue]` are
 //// refused on an `i64` field rather than emitted as something that reds.
 
+import {path.index};
 import {report.Violation, report.violation, report.noViolation, report.oneViolation};
 import {messages.Arg, messages.arg, messages.message, messages.builtInTemplate, messages.noArgs, messages.showI32, messages.showI64, messages.showF64};
 import {formats.isBase64, formats.isBase64Url, formats.isCidrv4, formats.isCidrv6, formats.isCreditCard, formats.isCuid, formats.isCuid2, formats.isCurrencyCode, formats.isE164, formats.isEmailHtml5, formats.isEmailRfc5322, formats.isEmailUnicode, formats.isEmoji, formats.isGuid, formats.isHash, formats.isHex, formats.isHostname, formats.isHttpUrl, formats.isIban, formats.isIpv4, formats.isIpv6, formats.isIsoDate, formats.isIsoDatetime, formats.isIsoDatetimeLocal, formats.isIsoDatetimeOffset, formats.isIsoDatetimePrecision, formats.isIsoDuration, formats.isIsoTime, formats.isIsoTimeWith, formats.isJwt, formats.isJwtAlg, formats.isLowercase, formats.isMac, formats.isNanoid, formats.isUlid, formats.isUppercase, formats.isUrl, formats.isUuid, formats.isUuidVersion, formats.urlParts};
@@ -509,6 +510,29 @@ pub fn vOneOf(
         value,
         [arg("options", allowed.join(", "))],
     );
+}
+
+// ── step 8: a rule of the application's, and the items of a list ───────────
+
+// `#[check(rule)]` on a field: the rule's answer, a `false` coded `custom`.
+pub fn vCheck(field: string, ok: bool) -> Array<Violation> {
+    return check(ok, field, "custom", "");
+}
+
+// `#[each(marker)]`: `check` over every item, each at `field[i]`.
+pub fn vEach<T>(
+    field: string,
+    items: Array<T>,
+    check: fn(at: string, item: T) -> Array<Violation>,
+) -> Array<Violation> {
+    var out: Array<Violation> = [];
+    var i = 0;
+    while (i < items.length) {
+        val item = items.at(i);
+        if (item != null) out = out.append(check(index(field, i), item));
+        i = i + 1;
+    }
+    return out;
 }
 
 // ── step 3: text checks ─────────────────────────────────────────────────────

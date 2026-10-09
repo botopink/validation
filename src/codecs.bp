@@ -1,0 +1,248 @@
+//// validation — the codec recipes (Zod § 9's list), each a pair of plain
+//// functions: `decode` from the wire value to the program's, answering an
+//// `Error` with the reason when the wire value is not one, and `encode` back.
+//// A field takes a pair with `#[codec(decode: f, encode: g)]` (decision 306),
+//// which waits on typed decorator arguments; the pairs are usable on their own.
+////
+//// Every pair is an inverse on its own domain: `decode(encode(x)) == x` for
+//// every program value, `encode(decode(t)) == t` for every canonical wire text
+//// (`test/codecs_test.bp`, five of each per recipe).
+////
+//// Not here: `utf8ToBytes` / `bytesToUtf8` — the language has no byte type
+//// (`language-gaps.md`).
+
+import {formats.isIsoDatetimeOffset, formats.isUrl};
+import {json, json.Json, io.clock, encoding, url, url.Url, math} from "std";
+
+// ── numbers from text ───────────────────────────────────────────────────────
+
+// `stringToInt`: an `i32` as decimal text, std's integer grammar, in range.
+pub fn textToInt(text: string) -> @Result<i32, string> {
+    val n = try text.parseFloat() catch 0.5;
+    val integral = case text.parseInt() {
+        Ok(_) -> true;
+        Error(_) -> false;
+    };
+    val fits = integral && n <= 2147483647.0 && n >= -2147483648.0;
+    if (fits == false)
+        throw "\"" + text + "\" is not a whole number in the i32 range";
+    return wholeI32(n);
+}
+
+pub fn intToText(n: i32) -> string {
+    return [n].join("");
+}
+
+// `stringToBigInt`: an `i64` as decimal text, the whole `i64` range (std's
+// `String.parseInt`, decision 319).
+pub fn textToLong(text: string) -> @Result<i64, string> {
+    return try text.parseInt();
+}
+
+pub fn longToText(n: i64) -> string {
+    return [n].join("");
+}
+
+// `stringToNumber`: an `f64` as std's numeral grammar.
+pub fn textToFloat(text: string) -> @Result<f64, string> {
+    return try text.parseFloat();
+}
+
+// The shortest text that reads back as `n`: a whole number within ±(2^53 − 1)
+// by its digits, any other by the host's shortest round-trip rendering.
+pub fn floatToText(n: f64) -> string {
+    val whole = isWholeFloat(n)
+        && n <= 9007199254740991.0
+        && n >= -9007199254740991.0;
+    if (whole) return [wholeI64(n)].join("");
+    return [n].join("");
+}
+
+// ── instants ────────────────────────────────────────────────────────────────
+
+// `isoDatetimeToDate`: RFC 3339 text with its zone → epoch milliseconds.
+pub fn isoToMillis(text: string) -> @Result<i64, string> {
+    if (isIsoDatetimeOffset(text) == false)
+        throw "\"" + text + "\" is not an ISO datetime with its zone";
+    return try clock.parseIso8601(text);
+}
+
+// Always UTC, always milliseconds: `2024-01-15T10:30:00.000Z`. Written here
+// rather than `clock.formatIso8601`, which answers the host's local time
+// without milliseconds on erlang and UTC with them on node.
+pub fn millisToIso(ms: i64) -> string {
+    val t = floatOfI64(ms);
+    val days = math.floor(t / 86400000.0);
+    val inDay = t - days * 86400000.0;
+    val z = days + 719468.0;
+    val era = math.floor(z / 146097.0);
+    val doe = z - era * 146097.0;
+    val yoe = math.floor(
+        (doe
+            - math.floor(doe / 1460.0)
+            + math.floor(doe / 36524.0)
+            - math.floor(doe / 146096.0))
+            / 365.0,
+    );
+    val doy = doe
+        - (365.0 * yoe + math.floor(yoe / 4.0) - math.floor(yoe / 100.0));
+    val mp = math.floor((5.0 * doy + 2.0) / 153.0);
+    val day = doy - math.floor((153.0 * mp + 2.0) / 5.0) + 1.0;
+    val month = if (mp < 10.0) mp + 3.0 else mp - 9.0;
+    val year = if (month <= 2.0) yoe + era * 400.0 + 1.0 else yoe + era * 400.0;
+    val hour = math.floor(inDay / 3600000.0);
+    val minute = math.floor((inDay - hour * 3600000.0) / 60000.0);
+    val second = math.floor(
+        (inDay - hour * 3600000.0 - minute * 60000.0) / 1000.0,
+    );
+    val milli = inDay - hour * 3600000.0 - minute * 60000.0 - second * 1000.0;
+    return [
+        padded(year, 4),
+        "-",
+        padded(month, 2),
+        "-",
+        padded(day, 2),
+        "T",
+        padded(hour, 2),
+        ":",
+        padded(minute, 2),
+        ":",
+        padded(second, 2),
+        ".",
+        padded(milli, 3),
+        "Z",
+    ].join("");
+}
+
+fn padded(n: f64, width: i32) -> string {
+    var text = [wholeI32(n)].join("");
+    while (text.length() < width) {
+        text = "0" + text;
+    }
+    return text;
+}
+
+// `epochSecondsToDate`: whole seconds → epoch milliseconds.
+pub fn secondsToMillis(seconds: i64) -> @Result<i64, string> {
+    val limit = wholeI64(9007199254740.0);
+    if (seconds > limit || seconds < 0 - limit)
+        throw "the seconds do not fit milliseconds within 2^53 - 1";
+    return seconds * wholeI64(1000.0);
+}
+
+pub fn millisToSeconds(ms: i64) -> i64 {
+    val thousand = wholeI64(1000.0);
+    return (ms - ms % thousand) / thousand;
+}
+
+// ── text in a wire format ───────────────────────────────────────────────────
+
+// `jsonCodec`: JSON text → the document (std's `json.decode`).
+pub fn textToJson(text: string) -> @Result<Json, string> {
+    return try json.decode(text);
+}
+
+// The document as JSON text, members in order, no whitespace; a number as
+// `floatToText` writes it.
+pub fn jsonToText(j: Json) -> string {
+    return case j {
+        Null -> "null";
+        Bool(value) -> if (value) "true" else "false";
+        Num(value) -> floatToText(value);
+        Str(value) -> json.quote(value);
+        Arr(items) -> json.array(items.map(jsonToTextOf));
+        Obj(members) -> json.object(members.map(memberText));
+    };
+}
+
+fn jsonToTextOf(j: Json) -> string {
+    return jsonToText(j);
+}
+
+fn memberText(m: #(string, Json)) -> #(string, string) {
+    return #(m[0], jsonToText(m[1]));
+}
+
+// `base64ToBytes` over text: base64 → the text it encodes.
+pub fn base64ToText(b: string) -> @Result<string, string> {
+    return try encoding.base64Decode(b);
+}
+
+pub fn textToBase64(s: string) -> string {
+    return encoding.base64Encode(s);
+}
+
+pub fn base64urlToText(b: string) -> @Result<string, string> {
+    return try encoding.base64UrlDecode(b);
+}
+
+pub fn textToBase64url(s: string) -> string {
+    return encoding.base64UrlEncode(s);
+}
+
+// `hexToBytes` over text: lowercase hex → the text it encodes.
+pub fn hexToText(h: string) -> @Result<string, string> {
+    return try encoding.hexDecode(h);
+}
+
+pub fn textToHex(s: string) -> string {
+    return encoding.hexEncode(s);
+}
+
+// `uriComponent`: percent-encoded text → the text (RFC 3986's unreserved set).
+pub fn uriComponentToText(c: string) -> @Result<string, string> {
+    return try encoding.percentDecode(c);
+}
+
+pub fn textToUriComponent(s: string) -> string {
+    return encoding.percentEncode(s);
+}
+
+// ── values ──────────────────────────────────────────────────────────────────
+
+// `stringToURL`: a URL that `#[url]` accepts → its parts.
+pub fn textToUrl(text: string) -> @Result<Url, string> {
+    if (isUrl(text) == false)
+        throw "\"" + text + "\" is not a URL with a scheme and a host";
+    return url.parse(text);
+}
+
+pub fn urlToText(u: Url) -> string {
+    return url.serialize(u);
+}
+
+// `stringToBoolean`: the stringbool set (`true 1 yes on y enabled` / `false 0
+// no off n disabled`, case-insensitive) → a `bool`; written back as `true` /
+// `false`.
+pub fn textToBool(text: string) -> @Result<bool, string> {
+    val word = text.toLower();
+    if (["true", "1", "yes", "on", "y", "enabled"].indexOf(word) >= 0)
+        return true;
+    if (["false", "0", "no", "off", "n", "disabled"].indexOf(word) >= 0)
+        return false;
+    throw "\""
+        + text
+        + "\" is not one of true, 1, yes, on, y, enabled, false, 0, no, off, n, disabled";
+}
+
+pub fn boolToText(b: bool) -> string {
+    if (b) return "true" else return "false";
+}
+
+// ── conversions the language has no spelling for (see `schemas.bp`) ───────
+
+#[@External.Node("Math.trunc($0)")]
+#[@External.Erlang("trunc($0)")]
+declare fn wholeI32(n: f64) -> i32;
+
+#[@External.Node("Math.trunc($0)")]
+#[@External.Erlang("trunc($0)")]
+declare fn wholeI64(n: f64) -> i64;
+
+#[@External.Node("(Number.isInteger($0))")]
+#[@External.Erlang("(fun(__N) -> __N == trunc(__N) end)($0)")]
+declare fn isWholeFloat(n: f64) -> bool;
+
+#[@External.Node("($0)")]
+#[@External.Erlang("float($0)")]
+declare fn floatOfI64(n: i64) -> f64;

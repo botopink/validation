@@ -34,7 +34,8 @@ validation/
 │                     (`files`: formats before schemas — the coercion of an ISO instant reads its shape)
 ├── AGENTS.md         ← you are here
 ├── src/
-│   ├── root.bp         pub mod path; report; table; messages; schemas; spi; formats; constraints; binding; decorators
+│   ├── root.bp         pub mod path; report; table; messages; formats; schemas; spi; constraints; binding; codecs;
+│   │                   decorators
 │   ├── path.bp         root, key, index, segments, head — the path a violation's `field` is
 │   ├── report.bp       Violation (restated, onlyIf, firstFailing), ValidationReport (isValid, merge,
 │   │                   toJson, toProblemDetail, empty, of),
@@ -51,24 +52,34 @@ validation/
 │   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
 │   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields,
 │   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument,
-│   │                   typeRestated;
+│   │                   typeRestated, transformEach; what `jsonOf<T>` calls: encodeInt, encodeLong,
+│   │                   encodeOptional, encodeArrayOf, encodeSetOf, encodeDictOf, intKeyText, textOfJson,
+│   │                   objectOf, membersOf, tagged (two more conversion cells: floatOfI32, floatOfI64)
 │   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
 │   │                   clearConstraints, unknownConstraintMessage, vConstraint   (registry: templates)
 │   ├── formats.bp      the string formats as walks or intersection-grammar regexes: is<Format>(s) for every
 │   │                   format marker, <name>Pattern() per regex format, urlParts, digitsValue (no host cell)
-│   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern
+│   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern,
+│   │                   vCheck (`#[check(rule)]`), vEach (`#[each(marker)]`)
 │   ├── binding.bp      bindInt, bindBool, bindFloat, bindRequired, bindEpochMillis, bindingReport, bindingCount,
 │   │                   bindingReset, bindingIsolated, isIntegerText, parseI32   (accumulator: templates)
+│   ├── codecs.bp       the twelve codec recipes as decode / encode pairs: textToInt / intToText,
+│   │                   textToLong / longToText, textToFloat / floatToText, isoToMillis / millisToIso,
+│   │                   secondsToMillis / millisToSeconds, textToJson / jsonToText, base64ToText /
+│   │                   textToBase64, base64urlToText / textToBase64url, hexToText / textToHex,
+│   │                   uriComponentToText / textToUriComponent, textToUrl / urlToText, textToBool /
+│   │                   boolToText (four conversion cells)
 │   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
 │                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
 │                       #[orElseOf], #[fallback], #[fallbackOf], #[coerce], #[stringbool], #[trim],
 │                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl], #[message],
-│                       #[typeMessage], #[stopOnFirst]
-└── test/             binding · checks_and_formats_example · coercion_and_forms_example · collections_example · constraints ·
+│                       #[typeMessage], #[stopOnFirst], #[preprocess], #[check], #[each]
+└── test/             binding · checks_and_formats_example · codecs · coercion_and_forms_example · collections_example · constraints ·
                       enums_and_unions_example · message_order · messages · nested_and_arrays_example ·
                       object_policy_example · parity · path · refine_and_messages_example ·
+                      transform_and_codec_example ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
                       spi · table   (suite `validation:`)
 ```
@@ -105,9 +116,11 @@ generates (front 68).
 
 ## Host cells
 
-`schemas.bp` has three host cells that hold no state — `wholeI32`, `wholeI64`
-(an `f64` already known whole and in range, as the integer it is) and `isWhole`
-— because the language has no `f64` → integer conversion. The decision of
+`schemas.bp` has five host cells that hold no state — `wholeI32`, `wholeI64`
+(an `f64` already known whole and in range, as the integer it is), `isWhole`,
+and `floatOfI32` / `floatOfI64` (an integer as the `f64` a JSON number is) —
+because the language has no conversion between `f64` and the integers
+(`codecs.bp` repeats four of them). The decision of
 whether a number fits is botopink; the cells convert.
 
 Three pieces of host state, all inline templates:
@@ -176,6 +189,8 @@ pub fn parse<TypeName>At(input: Json, at: string) -> @Result<TypeName, Validatio
 pub fn parse<TypeName>(input: Json) -> @Result<TypeName, ValidationReport>
 pub fn decode<TypeName>(text: string) -> @Result<TypeName, ValidationReport>
 pub fn bind<TypeName>(pairs: Array<#(string, string)>) -> @Result<TypeName, ValidationReport>   // a record
+pub fn jsonOf<TypeName>(v: TypeName) -> Json
+pub fn encode<TypeName>(v: TypeName) -> @Result<Json, ValidationReport>
 pub fn schemaOf<TypeName>() -> Schema<TypeName>
 pub fn optionsOf<TypeName>() -> Array<string>                                                   // an enum
 ```
@@ -252,6 +267,27 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   (none is `[]`), a `bool` with no value `false`, a name the type does not
   declare the unknown-key rule. A decoding marker on a `#[validated]` type that
   is not `#[schema]` is refused — nothing would read it.
+- **Encoding and value markers** (step 8). `jsonOf<TypeName>(v)` writes a value
+  as the document its decoder reads (a member holding `null` left out, a
+  `#[rest]` field's members merged in, an enum as its variant's name, a tagged
+  enum as its payload with the tag first); `encode<TypeName>(v)` runs the type's
+  own `validate()` first and is an `Error` for a value it refuses — the checks
+  of a nested record are its own decoder's, not re-run by the outer encode.
+  `#[preprocess(f)]` (`f: fn(input: Json) -> Json`) rewrites the field's raw
+  value before it is decoded; `#[check(rule)]` on a field (`rule: fn(v: T) ->
+  bool`) is a `custom` violation when the rule answers `false`; `#[each("m")]`
+  applies one marker — a parameterless check, or a transform on an
+  `Array<string>` — to every item of an `Array<T>` / `Set<T>`, each violation at
+  `field[i]`. A decorator argument is not typed yet (`01-checker` step 24), so
+  a function that is missing or of another signature fails where the emitted
+  code calls it, not at the argument; `#[map]`, `#[tryMap]`, `#[codec]` and the
+  type-level `#[check(rule, at: .field, …)]` wait on it (the input type of `f`,
+  a labelled argument), and `#[check]` on a type is refused saying so.
+  `#[orElseOf(f)]` / `#[fallbackOf(f)]` take the function itself (decision 281).
+  `codecs.bp` holds Zod's recipes as decode / encode pairs, each an inverse on
+  its domain (`test/codecs_test.bp`); `millisToIso` writes UTC with milliseconds
+  itself, because std's `clock.formatIso8601` answers local time without them
+  on erlang.
 - **The checks are `#[validated]`'s.** A type that carries constraint markers
   is also `#[validated]`; the emitted decoder calls `validate<TypeName>` on the
   record it built and re-roots the report under the record's path

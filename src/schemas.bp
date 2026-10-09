@@ -860,3 +860,87 @@ pub fn typeRestated<T>(
         }),
     );
 }
+
+// ── step 8: encoding ────────────────────────────────────────────────────────
+//
+// `encode<TypeName>` / `jsonOf<TypeName>` (`#[schema]`) write a value as the
+// document its decoder reads: a number as a JSON number, a list as an array, a
+// set as an array in its order, a dict as an object, a tuple as an array, a
+// union as its arm, an enum as its variant's name. A member whose value is
+// `null` is left out — absent and `null` decode the same.
+
+// An integer as the `f64` a JSON number is — converting, never deciding.
+#[@External.Node("($0)")]
+#[@External.Erlang("float($0)")]
+declare fn floatOfI32(n: i32) -> f64;
+
+#[@External.Node("($0)")]
+#[@External.Erlang("float($0)")]
+declare fn floatOfI64(n: i64) -> f64;
+
+pub fn encodeInt(n: i32) -> Json {
+    return Json.Num(floatOfI32(n));
+}
+
+pub fn encodeLong(n: i64) -> Json {
+    return Json.Num(floatOfI64(n));
+}
+
+pub fn encodeOptional<T>(value: ?T, item: fn(v: T) -> Json) -> Json {
+    val v = value;
+    if (v == null) return Json.Null;
+    return item(v);
+}
+
+pub fn encodeArrayOf<T>(values: Array<T>, item: fn(v: T) -> Json) -> Json {
+    return Json.Arr(values.map(item));
+}
+
+pub fn encodeSetOf<T>(values: Set<T>, item: fn(v: T) -> Json) -> Json {
+    return Json.Arr(values.toList().map(item));
+}
+
+pub fn encodeDictOf<K, V>(
+    values: Dict<K, V>,
+    keyText: fn(k: K) -> string,
+    item: fn(v: V) -> Json,
+) -> Json {
+    val none: Array<#(string, Json)> = [];
+    return Json.Obj(
+        values.fold(
+            none,
+            { acc, k, v -> acc.append([#(keyText(k), item(v))]) },
+        ),
+    );
+}
+
+// The text a key is written as: an `i32` key by its digits, an enum key by
+// its variant's name (its encoding is that text).
+pub fn intKeyText(k: i32) -> string {
+    return [k].join("");
+}
+
+pub fn textOfJson(j: Json) -> string {
+    return textOf(j);
+}
+
+// An object of `members`, those holding `null` left out.
+pub fn objectOf(members: Array<#(string, Json)>) -> Json {
+    return Json.Obj(members.filter({ m -> isNull(m[1]) == false }));
+}
+
+// The members of an encoded object — what a `#[rest]` field adds to its
+// record's own.
+pub fn membersOf(j: Json) -> Array<#(string, Json)> {
+    return j.members();
+}
+
+// A tagged enum's variant: its payload's object with the tag member first.
+pub fn tagged(payload: Json, tag: string, variant: string) -> Json {
+    return Json.Obj([#(tag, Json.Str(variant))].append(payload.members()));
+}
+
+// `#[each(transform)]` on an `Array<string>`: the transforms over every item.
+pub fn transformEach(items: Array<string>, ops: string) -> Array<string> {
+    return items.map({ x -> transformText(x, ops) });
+}

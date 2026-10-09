@@ -1,0 +1,105 @@
+// The suite case of the front's example in decision 306's shape: what only a
+// value could say is a field marker. `#[map(f)]`, `#[tryMap(f)]` and
+// `#[codec(decode: f, encode: g)]` read the type of `f`'s parameter, which a
+// decorator argument carries only once arguments are typed (`01-checker` step
+// 24) — their cases are not here yet; the recipes are `codecs_test.bp`'s.
+//
+// Front 125 — validation: Zod's feature set · examples/transform-and-codec-example.bp
+//
+//   z.preprocess(fn, z.int())                         -> #[preprocess(fn)]
+//   z.int().refine(isEven)                            -> #[check(isEven)]
+//   z.array(z.email())                                -> #[each("email")]
+//   z.array(z.string().toLowerCase())                 -> #[each("lowercased")]
+//   schema.encode(value)                              -> encode<T>
+//
+// Upstream: ZOD_DOCUMENTATION.md §§ 4.31 (Refinements), 4.33 (Transforms),
+//           4.36 (Preprocess), 9 (Codecs) — https://zod.dev/codecs
+//
+// Target: both.
+
+import {decorators.schema, decorators.validated, decorators.minLength, decorators.each, decorators.preprocess, decorators.check};
+import {schemas};
+import {schemas.Schema, report.ValidationReport, report.Violation};
+import {constraints.vMinLength, constraints.vEmail, constraints.vEach, constraints.vCheck, table.constraintTableJson};
+import {json.Json} from "std";
+
+// `z.preprocess((val) => typeof val === "string" ? Number(val) : val, z.int())`
+fn digitsToNumber(input: Json) -> Json {
+    return case input {
+        Str(value) -> numberOrSelf(value, input);
+        _ -> input;
+    };
+}
+
+fn numberOrSelf(text: string, input: Json) -> Json {
+    return case text.parseFloat() {
+        Ok(n) -> Json.Num(n);
+        Error(_) -> input;
+    };
+}
+
+fn isEven(n: i32) -> bool {
+    return n % 2 == 0;
+}
+
+#[schema]
+#[validated]
+pub type Invite(
+    #[minLength(1)] title: string,
+    // LANGUAGE GAP: a decorator's name is not a value a package's decorator
+    // can take (`Decorator` is unknown there), so the marker is named as text.
+    #[each("email")] #[each("lowercased")] guests: Array<string>,
+    #[preprocess(digitsToNumber)] seats: i32,
+    #[check(isEven)] tables: i32,
+)
+
+fn codes(r: @Result<Invite, ValidationReport>) -> string {
+    return case r {
+        Ok(_) -> "";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+test "validation: preprocess runs before the field's decoder" {
+    val invite = try decodeInvite(
+        """{"title": "Launch", "guests": [], "seats": "42", "tables": 2}""",
+    );
+    assert invite.seats == 42;
+}
+
+test "validation: a field's rule answers a custom violation" {
+    val r = decodeInvite(
+        """{"title": "Launch", "guests": [], "seats": 1, "tables": 3}""",
+    );
+    assert codes(r) == "tables:custom";
+}
+
+test "validation: #[each] checks and transforms every item, at the item's path" {
+    val r = decodeInvite(
+        """{"title": "Launch", "guests": ["a@b.c", "nope"], "seats": 1, "tables": 2}""",
+    );
+    assert codes(r) == "guests[1]:email";
+    val ok = try decodeInvite(
+        """{"title": "Launch", "guests": ["A@B.C"], "seats": 1, "tables": 2}""",
+    );
+    assert ok.guests.join(",") == "a@b.c";
+}
+
+test "validation: a record round-trips through encode" {
+    val invite = try decodeInvite(
+        """{"title": "Launch", "guests": ["a@b.c"], "seats": 3, "tables": 4}""",
+    );
+    val back = try encodeInvite(invite);
+    val again = try parseInvite(back);
+    assert again.title == "Launch";
+    assert again.guests.join(",") == "a@b.c";
+    assert again.seats == 3;
+}
+
+test "validation: encode refuses a value its own checks refuse" {
+    // Refinements run in both directions — ZOD_DOCUMENTATION.md § 9.6.
+    val broken = Invite(title: "", guests: [], seats: 1, tables: 2);
+    assert encodeInvite(broken).isError();
+}

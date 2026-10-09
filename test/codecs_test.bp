@@ -1,0 +1,198 @@
+//// validation — the codec recipes (front 125 step 8): every pair is an
+//// inverse on its own domain. For each recipe, five program values go through
+//// `encode` and back through `decode` unchanged, five canonical wire texts go
+//// through `decode` and back through `encode` unchanged, and a wire value that
+//// is not one is an `Error`.
+
+import {codecs.textToInt, codecs.intToText, codecs.textToLong, codecs.longToText, codecs.textToFloat, codecs.floatToText};
+import {codecs.isoToMillis, codecs.millisToIso, codecs.secondsToMillis, codecs.millisToSeconds};
+import {codecs.textToJson, codecs.jsonToText, codecs.base64ToText, codecs.textToBase64, codecs.base64urlToText, codecs.textToBase64url};
+import {codecs.hexToText, codecs.textToHex, codecs.uriComponentToText, codecs.textToUriComponent};
+import {codecs.textToUrl, codecs.urlToText, codecs.textToBool, codecs.boolToText};
+import {json.Json} from "std";
+
+fn failed<T>(r: @Result<T, string>) -> bool {
+    return case r {
+        Ok(_) -> false;
+        Error(_) -> true;
+    };
+}
+
+test "validation: textToInt / intToText" {
+    val values = [0, 7, -42, 2147483647, -2147483648];
+    assert values.map({ n -> try textToInt(intToText(n)) catch 1 }).join(",")
+        == "0,7,-42,2147483647,-2147483648";
+    val texts = ["0", "7", "-42", "2147483647", "-2147483648"];
+    assert texts.map({ t -> intToText(try textToInt(t) catch 1) }).join(",")
+        == texts.join(",");
+    assert failed(textToInt("2147483648"));
+    assert failed(textToInt("1.5"));
+    assert failed(textToInt("x"));
+}
+
+test "validation: textToLong / longToText" {
+    val texts = [
+        "0",
+        "9007199254740991",
+        "-9007199254740991",
+        "9007199254740993",
+        "9223372036854775807",
+        "-9223372036854775808",
+        "1700000000000",
+        "-1",
+    ];
+    assert texts
+        .map({ t -> longToText(try textToLong(t) catch textToLongZero()) })
+        .join(",")
+        == texts.join(",");
+    val values = texts.map({ t -> try textToLong(t) catch textToLongZero() });
+    assert values
+        .map(
+            { n -> longToText(try textToLong(longToText(n)) catch textToLongZero()) },
+        )
+        .join(",")
+        == texts.join(",");
+    assert failed(textToLong("9223372036854775808"));
+}
+
+fn textToLongZero() -> i64 {
+    return try textToLong("0") catch textToLongZero();
+}
+
+test "validation: textToFloat / floatToText" {
+    val values = [0.0, 2.5, -1.25, 1000000.0, 0.5];
+    assert values
+        .map({ n -> floatToText(try textToFloat(floatToText(n)) catch 9.0) })
+        .join(",")
+        == values.map({ n -> floatToText(n) }).join(",");
+    val texts = ["0", "2.5", "-1.25", "1000000", "0.5"];
+    assert texts
+        .map({ t -> floatToText(try textToFloat(t) catch 9.0) })
+        .join(",")
+        == texts.join(",");
+    assert failed(textToFloat(".5"));
+}
+
+test "validation: isoToMillis / millisToIso" {
+    val texts = [
+        "2024-01-15T10:30:00.000Z",
+        "1970-01-01T00:00:00.000Z",
+        "2000-02-29T23:59:59.999Z",
+        "2020-01-01T06:15:00.000Z",
+        "1999-12-31T00:00:00.001Z",
+    ];
+    assert texts
+        .map({ t -> millisToIso(try isoToMillis(t) catch textToLongZero()) })
+        .join(",")
+        == texts.join(",");
+    val values = texts.map({ t -> try isoToMillis(t) catch textToLongZero() });
+    assert values
+        .map(
+            { ms -> millisToIso(try isoToMillis(millisToIso(ms)) catch textToLongZero()) },
+        )
+        .join(",")
+        == texts.join(",");
+    assert failed(isoToMillis("2024-01-15"));
+}
+
+test "validation: secondsToMillis / millisToSeconds" {
+    val seconds = ["0", "1", "1700000000", "-86400", "60"].map(
+        { t -> try textToLong(t) catch textToLongZero() },
+    );
+    assert seconds
+        .map(
+            { s -> longToText(millisToSeconds(try secondsToMillis(s) catch textToLongZero())) },
+        )
+        .join(",")
+        == "0,1,1700000000,-86400,60";
+    assert seconds
+        .map({ s -> longToText(try secondsToMillis(s) catch textToLongZero()) })
+        .join(",")
+        == "0,1000,1700000000000,-86400000,60000";
+}
+
+test "validation: textToJson / jsonToText" {
+    val texts = [
+        "null",
+        "[1,2.5,\"a\"]",
+        "{\"a\":true,\"b\":{\"c\":[]}}",
+        "\"line\\nbreak\"",
+        "-3",
+    ];
+    assert texts
+        .map({ t -> jsonToText(try textToJson(t) catch Json.Null) })
+        .join(" ")
+        == texts.join(" ");
+    assert failed(textToJson("{"));
+}
+
+test "validation: the text codecs — base64, base64url, hex, uriComponent" {
+    val values = ["", "a", "hello world", "a/b?c=d&e", "~-._"];
+    assert values
+        .map({ v -> try base64ToText(textToBase64(v)) catch "!" })
+        .join("|")
+        == values.join("|");
+    assert values
+        .map({ v -> try base64urlToText(textToBase64url(v)) catch "!" })
+        .join("|")
+        == values.join("|");
+    assert values.map({ v -> try hexToText(textToHex(v)) catch "!" }).join("|")
+        == values.join("|");
+    assert values
+        .map({ v -> try uriComponentToText(textToUriComponent(v)) catch "!" })
+        .join("|")
+        == values.join("|");
+    val b64 = ["", "YQ==", "aGVsbG8gd29ybGQ=", "YS9iP2M9ZCZl", "fi0uXw=="];
+    assert b64
+        .map({ t -> textToBase64(try base64ToText(t) catch "!") })
+        .join("|")
+        == b64.join("|");
+    val b64url = ["", "YQ", "aGVsbG8gd29ybGQ", "YS9iP2M9ZCZl", "fi0uXw"];
+    assert b64url
+        .map({ t -> textToBase64url(try base64urlToText(t) catch "!") })
+        .join("|")
+        == b64url.join("|");
+    val hex = ["", "61", "68656c6c6f", "2f3f", "7e2d2e5f"];
+    assert hex.map({ t -> textToHex(try hexToText(t) catch "!") }).join("|")
+        == hex.join("|");
+    val uri = ["", "a", "hello%20world", "a%2Fb%3Fc%3Dd%26e", "~-._"];
+    assert uri
+        .map({ t -> textToUriComponent(try uriComponentToText(t) catch "!") })
+        .join("|")
+        == uri.join("|");
+    assert failed(hexToText("zz"));
+}
+
+test "validation: textToUrl / urlToText" {
+    val texts = [
+        "https://example.com",
+        "http://a.b:8080/x?y=1",
+        "https://example.com/path#frag",
+        "ftp://host.example/file",
+        "https://sub.example.org/a/b",
+    ];
+    assert texts
+        .map({ t ->
+            case textToUrl(t) {
+                Ok(u) -> urlToText(u);
+                Error(why) -> why;
+            }
+        })
+        .join(" ")
+        == texts.join(" ");
+    assert failed(textToUrl("not a url"));
+}
+
+test "validation: textToBool / boolToText" {
+    val texts = ["true", "false", "true", "false", "true"];
+    assert texts
+        .map({ t -> boolToText(try textToBool(t) catch false) })
+        .join(",")
+        == texts.join(",");
+    assert [true, false]
+        .map({ b -> boolToText(try textToBool(boolToText(b)) catch false) })
+        .join(",")
+        == "true,false";
+    assert boolToText(try textToBool("YES") catch false) == "true";
+    assert failed(textToBool("tuna"));
+}

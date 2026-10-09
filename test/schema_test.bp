@@ -509,13 +509,13 @@ fn noScore() -> i64 {
 #[schema]
 #[validated]
 pub type Settings(
-    #[orElseOf("defaultCity")] city: string,
+    #[orElseOf(defaultCity)] city: string,
     #[orElse(3)] retries: i32,
     #[orElse(2.5)] ratio: f64,
     #[orElse(true)] on: bool,
     #[orElse(10)] big: i64,
     #[fallback(1)] #[minValue(1)] #[maxValue(9)] level: i32,
-    #[fallbackOf("noScore")] score: i64,
+    #[fallbackOf(noScore)] score: i64,
 )
 
 fn codesOf<T>(r: @Result<T, ValidationReport>) -> string {
@@ -605,4 +605,27 @@ test "validation: bind over form pairs reports what does not read and builds not
 test "validation: a name the record does not declare is the unknown-key rule" {
     val pairs = try querystring.parse("email=a&age=1&admin=1") catch [];
     assert codesOf(bindFormSignup(pairs)) == "admin:unrecognizedKey";
+}
+
+// ── step 8: encode is decode's inverse ──────────────────────────────────────
+
+test "validation: nested records, optionals, lists, unions, sets and dicts round-trip" {
+    val text = """{"id": "A1", "ship": {"street": "Rua A", "zip": "50000"}, "lines": [{"sku": "x", "quantity": 2}], "tags": ["t"]}""";
+    val doc = try json.decode(text) catch Json.Null;
+    val order = try parseOrder(doc);
+    val again = try parseOrder(try encodeOrder(order));
+    assert again.ship.zip == "50000";
+    assert again.billing == null;
+    assert again.lines.map({ l -> l.sku }).join(",") == "x";
+    val slot = try parseSlot(
+        try json.decode("""{"id": "s-1", "seen": [3, 1]}""") catch Json.Null,
+    );
+    val slotAgain = try parseSlot(try encodeSlot(slot));
+    assert slotAgain.id is string;
+    assert slotAgain.seen.size() == 2;
+    val env = try parseEnvelope(
+        try json.decode("""{"kind": "a", "x": 1, "y": 2}""") catch Json.Null,
+    );
+    val envAgain = try parseEnvelope(try encodeEnvelope(env));
+    assert envAgain.fields.keys().join(",") == "x,y";
 }

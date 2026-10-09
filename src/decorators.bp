@@ -54,6 +54,7 @@
 //// is designed out at compile time.
 
 import {formats.isIsoDatetimeOffset};
+import {json.Json} from "std";
 
 // ── `#[validated]` ──────────────────────────────────────────────────────────
 
@@ -212,7 +213,43 @@ pub fn validated(comptime decl: @Decl) {
                     why = "a registered constraint reads a `string`, and this field is `"
                         + declared
                         + "`";
-            if (call == "" && why == "") {
+            if (n == "check")
+                call = "vCheck(" + q + ", " + raw + "(" + read + "))";
+            if (n == "each") {
+                val m = unquoted(a.args.join(""));
+                val itemType = if (isList)
+                    schemaItemOf(t)
+                else if (t.startsWith("Set<"))
+                    schemaArgs(t).slice(0, 1).join("")
+                else
+                    "";
+                val items = if (t.startsWith("Set<"))
+                    read + ".toList()"
+                else
+                    read;
+                val itemCall = if (itemType == "")
+                    ""
+                else
+                    itemRule(m, itemType, names);
+                if (itemType == "")
+                    why = "it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `"
+                        + declared
+                        + "`";
+                if (itemType != "" && itemCall.startsWith("!"))
+                    why = itemCall.slice(1, itemCall.length());
+                if (itemType != ""
+                    && itemCall != ""
+                    && itemCall.startsWith("!") == false
+                    && itemCall != "-")
+                    call = "vEach("
+                        + q
+                        + ", "
+                        + items
+                        + ", { __p, __x -> "
+                        + itemCall
+                        + " })";
+            }
+            if (call == "" && why == "" && n != "each") {
                 val rule = markerRule(n, t, declared, q, read, a.args, names);
                 if (rule.startsWith("!"))
                     why = rule.slice(1, rule.length())
@@ -354,6 +391,7 @@ fn decodeMarkers() -> Array<string> {
         "normalized",
         "normalizedUrl",
         "typeMessage",
+        "preprocess",
     ];
 }
 
@@ -556,6 +594,31 @@ fn refusedOn(applies: string, declared: string) -> string {
         + ", and this field is `"
         + declared
         + "`";
+}
+
+// The call `#[each(marker)]` emits for one item (`__x`, at the path `__p`),
+// `"!" + why` for a marker that cannot check the item type, `"-"` for a
+// transform (`#[schema]` applies it), `""` for a name that is no marker.
+fn itemRule(m: string, t: string, names: Array<string>) -> string {
+    if (transformNames().indexOf(m) >= 0) return "-";
+    val number = numberSuffix(t);
+    if (m == "notBlank" || m == "notEmpty" || m == "email") {
+        if (t != "string") return refusedOn("`string`", t);
+        return predicateOf(m) + "(__p, __x)";
+    }
+    if (m == "positive" || m == "positiveOrZero") {
+        if (number == "") return refusedOn("`i32`, `i64` and `f64`", t);
+        return predicateOf(m) + number + "(__p, __x)";
+    }
+    if (m == "pastDate" || m == "futureDate") {
+        if (t != "i64")
+            return refusedOn("epoch milliseconds, which is `i64`", t);
+        return predicateOf(m) + "(__p, __x)";
+    }
+    val rule = markerRule(m, t, t, "__p", "__x", [], names);
+    if (rule == "")
+        return "!`" + m + "` is not a marker #[each] can apply to an item";
+    return rule;
 }
 
 fn markerRule(
@@ -1479,6 +1542,181 @@ fn schemaTupleFn(
         + deps.join("");
 }
 
+// ── encoding (step 8) ───────────────────────────────────────────────────────
+//
+// `jsonOf<TypeName>(v) -> Json` writes a value as the document its decoder
+// reads, by the same name contract (`jsonOf<ThatType>` for a field of another
+// `#[schema]` type); `encode<TypeName>(v) -> @Result<Json, ValidationReport>`
+// runs the type's own checks first — refinements run in both directions — and
+// a value that fails them is an `Error`, not a document. Each part below a
+// field's level gets one emitted function, `__encode<Record>_<field>_<place>`,
+// for the reason the decoders do.
+
+fn encHelperName(owner: string, field: string, id: string) -> string {
+    return "__encode" + owner + "_" + field + "_" + id;
+}
+
+fn encRef(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return "jsonOf" + t;
+    return encHelperName(owner, field, id);
+}
+
+fn encCall(
+    t: string,
+    e: string,
+    owner: string,
+    field: string,
+    id: string,
+) -> string {
+    if (t == "string") return "Json.Str(" + e + ")";
+    if (t == "i32") return "schemas.encodeInt(" + e + ")";
+    if (t == "i64") return "schemas.encodeLong(" + e + ")";
+    if (t == "f64") return "Json.Num(" + e + ")";
+    if (t == "bool") return "Json.Bool(" + e + ")";
+    if (t == "Json") return e;
+    if (schemaIsUnion(t) || schemaIsTuple(t))
+        return encHelperName(owner, field, id) + "(" + e + ")";
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        return "schemas.encodeDictOf("
+            + e
+            + ", "
+            + encHelperName(owner, field, id + "_0")
+            + ", "
+            + encRef(kv.slice(1, 2).join(""), owner, field, id + "_1")
+            + ")";
+    }
+    val inner = schemaInner(t);
+    if (inner == "") return "jsonOf" + t + "(" + e + ")";
+    val ref = encRef(inner, owner, field, id + "_0");
+    if (t.startsWith("?"))
+        return "schemas.encodeOptional(" + e + ", " + ref + ")";
+    if (schemaIsSet(t)) return "schemas.encodeSetOf(" + e + ", " + ref + ")";
+    return "schemas.encodeArrayOf(" + e + ", " + ref + ")";
+}
+
+fn encNeed(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return "";
+    if (schemaIsUnion(t) || schemaIsTuple(t))
+        return encHelpers(t, owner, field, id);
+    return "fn "
+        + encHelperName(owner, field, id)
+        + "(x: "
+        + t
+        + ") -> Json {\n    return "
+        + encCall(t, "x", owner, field, id)
+        + ";\n}\n"
+        + encHelpers(t, owner, field, id);
+}
+
+fn encHelpers(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsUnion(t)) {
+        val arms = splitTop(t, "|");
+        var body: Array<string> = [];
+        var deps: Array<string> = [];
+        var j = 0;
+        while (j < arms.length) {
+            val a = arms.slice(j, j + 1).join("");
+            val armId = id + "_" + [j].join("");
+            body.push(
+                "    if (__x is "
+                    + a
+                    + ") {\n        return "
+                    + encCall(a, "__x", owner, field, armId)
+                    + ";\n    }",
+            );
+            deps.push(encHelpers(a, owner, field, armId));
+            j = j + 1;
+        }
+        return "fn "
+            + encHelperName(owner, field, id)
+            + "(x: "
+            + t
+            + ") -> Json {\n    val __x = x;\n"
+            + body.join("\n")
+            + "\n    return Json.Null;\n}\n"
+            + deps.join("");
+    }
+    if (schemaIsTuple(t)) {
+        val items = schemaTupleItems(t);
+        var parts: Array<string> = [];
+        var deps: Array<string> = [];
+        var i = 0;
+        while (i < items.length) {
+            val it = items.slice(i, i + 1).join("");
+            val n = [i].join("");
+            parts.push(
+                encCall(it, "__x[" + n + "]", owner, field, id + "_" + n),
+            );
+            deps.push(encHelpers(it, owner, field, id + "_" + n));
+            i = i + 1;
+        }
+        return "fn "
+            + encHelperName(owner, field, id)
+            + "(x: "
+            + t
+            + ") -> Json {\n    val __x = x;\n    return Json.Arr(["
+            + parts.join(", ")
+            + "]);\n}\n"
+            + deps.join("");
+    }
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        val k = kv.slice(0, 1).join("");
+        val keyBody = if (k == "string")
+            "k"
+        else if (k == "i32")
+            "schemas.intKeyText(k)"
+        else
+            "schemas.textOfJson(jsonOf" + k + "(k))";
+        return "fn "
+            + encHelperName(owner, field, id + "_0")
+            + "(k: "
+            + k
+            + ") -> string {\n    return "
+            + keyBody
+            + ";\n}\n"
+            + encNeed(kv.slice(1, 2).join(""), owner, field, id + "_1");
+    }
+    val inner = schemaInner(t);
+    if (inner == "") return "";
+    return encNeed(inner, owner, field, id + "_0");
+}
+
+// What `#[schema]` on an enum writes: the variant's name; tagged, the payload's
+// object with the tag member first.
+fn encEnum(name: string, variants: Array<string>, tag: string) -> string {
+    val arms = variants.map({ v ->
+        if (tag == "")
+            "        " + v + " -> Json.Str(\"" + v + "\");"
+        else
+            "        "
+                + v
+                + "(value) -> schemas.tagged(jsonOf"
+                + name
+                + v
+                + "(value), \""
+                + tag
+                + "\", \""
+                + v
+                + "\");";
+    });
+    return "pub fn jsonOf"
+        + name
+        + "(v: "
+        + name
+        + ") -> Json {\n    return case v {\n"
+        + arms.join("\n")
+        + "\n    };\n}\n"
+        + "pub fn encode"
+        + name
+        + "(v: "
+        + name
+        + ") -> @Result<Json, ValidationReport> {\n    return jsonOf"
+        + name
+        + "(v);\n}\n";
+}
+
 fn schemaIsMarker(name: string) -> bool {
     return markerNames().indexOf(name) >= 0;
 }
@@ -1703,7 +1941,9 @@ pub fn schema(comptime decl: @Decl) {
     val isEnum = decl.variants.length > 0;
     if (isEnum)
         @emit(
-            schemaEnum(decl.name, decl.variants, tag) + schemaCommon(decl.name),
+            schemaEnum(decl.name, decl.variants, tag)
+                + encEnum(decl.name, decl.variants, tag)
+                + schemaCommon(decl.name),
         );
     if (isEnum == false && tag != "")
         decl.fail(
@@ -1718,6 +1958,8 @@ pub fn schema(comptime decl: @Decl) {
     var helpers: Array<string> = [];
     var fallbacks: Array<string> = [];
     var hints: Array<string> = [];
+    var encMembers: Array<string> = [];
+    var encRest = "";
     var problem = "";
     var marked = false;
     var rests = 0;
@@ -1752,14 +1994,20 @@ pub fn schema(comptime decl: @Decl) {
         if (isStringBool && isCoerced)
             problem = where
                 + "#[stringbool] already reads the field from text - drop #[coerce]";
+        val pre = f.annotations
+            .filter({ a -> a.name == "preprocess" })
+            .map({ a -> a.args.join("") })
+            .join("");
+        val rawInput = if (pre == "") "input" else pre + "(input)";
+        val rawSource = if (pre == "") source else pre + "(" + source + ")";
         val coercedInput = if (isCoerced && hint != "")
-            "schemas.coerced(input, \"" + hint + "\")"
+            "schemas.coerced(" + rawInput + ", \"" + hint + "\")"
         else
-            "input";
+            rawInput;
         val coercedSource = if (isCoerced && hint != "")
-            "schemas.coerced(" + source + ", \"" + hint + "\")"
+            "schemas.coerced(" + rawSource + ", \"" + hint + "\")"
         else
-            source;
+            rawSource;
         val decoded = if (isStringBool)
             "schemas.decodeStringBool(input, at)"
         else if (supported)
@@ -1773,7 +2021,18 @@ pub fn schema(comptime decl: @Decl) {
         else
             "0";
         if (supported)
-            helpers.push(schemaHelpers(declared, decl.name, f.name, "0"));
+            helpers.push(
+                schemaHelpers(declared, decl.name, f.name, "0")
+                    + encHelpers(declared, decl.name, f.name, "0"),
+            );
+        val encoded = if (supported)
+            encCall(declared, "v." + f.name, decl.name, f.name, "0")
+        else
+            "Json.Null";
+        if (names.indexOf("rest") >= 0)
+            encRest = ".append(schemas.membersOf(" + encoded + "))"
+        else
+            encMembers.push("#(\"" + f.name + "\", " + encoded + ")");
         if (supported == false)
             problem = "#[schema] on `"
                 + decl.name
@@ -1814,6 +2073,32 @@ pub fn schema(comptime decl: @Decl) {
                     a.name;
             })
             .join("|");
+        val eachOps = f.annotations
+            .filter({ a ->
+                a.name == "each"
+                    && transformNames().indexOf(unquoted(a.args.join(""))) >= 0;
+            })
+            .map({ a -> unquoted(a.args.join("")) })
+            .join("|");
+        if (eachOps != "" && schemaIsList(declared) == false)
+            problem = where
+                + "#[each] applies a transform to every item of an `Array<T>`, and this field is `"
+                + declared
+                + "`";
+        if (eachOps != "" && schemaIsList(declared)) {
+            val eachName = "__each" + decl.name + "_" + f.name;
+            helpers.push(
+                "fn "
+                    + eachName
+                    + schemaResult(declared)
+                    + "    val __s = try "
+                    + decoded
+                    + ";\n    return schemas.transformEach(__s, \""
+                    + eachOps
+                    + "\");\n}\n",
+            );
+            call = eachName + "(" + coercedSource + ", " + path + ")";
+        }
         if (ops != "" && bare != "string")
             problem = where
                 + "a transform rewrites text, and this field is `"
@@ -2032,6 +2317,10 @@ pub fn schema(comptime decl: @Decl) {
     else
         "    val __checked = schemas.under(at, __v.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n    return __v;\n";
     val checks = if (validated) checked else "    return __v;\n";
+    val encodeChecks = if (validated)
+        "    val __checked = v.validate();\n    if (__checked.violations.length > 0) { throw __checked; }\n"
+    else
+        "";
     val recordText = if (isEnum)
         ""
     else
@@ -2054,6 +2343,24 @@ pub fn schema(comptime decl: @Decl) {
             + ");\n"
             + checks
             + "}\n"
+            + "pub fn jsonOf"
+            + decl.name
+            + "(v: "
+            + decl.name
+            + ") -> Json {\n    return schemas.objectOf(["
+            + encMembers.join(", ")
+            + "]"
+            + encRest
+            + ");\n}\n"
+            + "pub fn encode"
+            + decl.name
+            + "(v: "
+            + decl.name
+            + ") -> @Result<Json, ValidationReport> {\n"
+            + encodeChecks
+            + "    return jsonOf"
+            + decl.name
+            + "(v);\n}\n"
             + "pub fn bind"
             + decl.name
             + "(pairs: Array<#(string, string)>) -> @Result<"
@@ -2121,14 +2428,11 @@ pub fn orElse(comptime decl: @Decl, comptime value: string | i32 | f64 | bool) {
         decl.fail("#[orElse] must annotate a field");
 }
 
-// `.default(fn)`: an absent key takes what the named function of the type's
-// module answers, called per parse. The name is text until decorator arguments
-// are typed (decision 281).
-pub fn orElseOf(comptime decl: @Decl, comptime function: string) {
+// `.default(fn)`: an absent key takes what the function answers, called per
+// parse — the function itself, not its name (decision 281).
+pub fn orElseOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[orElseOf] must annotate a field");
-    val problem = textArgProblem("orElseOf", "function name", function);
-    if (problem != "") decl.fail(problem);
 }
 
 // `.catch(v)`: a value that does not decode, or fails its checks, is replaced
@@ -2141,12 +2445,10 @@ pub fn fallback(
         decl.fail("#[fallback] must annotate a field");
 }
 
-// `.catch(fn)`: the same, with what the named function answers.
-pub fn fallbackOf(comptime decl: @Decl, comptime function: string) {
+// `.catch(fn)`: the same, with what the function answers.
+pub fn fallbackOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[fallbackOf] must annotate a field");
-    val problem = textArgProblem("fallbackOf", "function name", function);
-    if (problem != "") decl.fail(problem);
 }
 
 // ── step 6: coercion and transforms ─────────────────────────────────────────
@@ -2218,4 +2520,40 @@ pub fn typeMessage(comptime decl: @Decl, comptime text: string) {
 pub fn stopOnFirst(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[stopOnFirst] must annotate a field");
+}
+
+// ── step 8: field markers that take a function or a marker ─────────────────
+
+// `z.preprocess(f, …)`: the field's raw document value goes through `f` before
+// it is decoded.
+pub fn preprocess(comptime decl: @Decl, comptime f: fn(input: Json) -> Json) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[preprocess] must annotate a field");
+}
+
+// `.refine(rule)` on a field: `rule` answers whether the field's value is
+// valid; a `false` is a violation coded `custom`. On a type, the form takes the
+// rule, the field it reports at, a message and a code (decision 280) — typed
+// decorator arguments, which `01-checker` step 24 brings.
+pub fn check<T>(comptime decl: @Decl<T>, comptime rule: fn(v: T) -> bool) {
+    if (decl.kind == DeclKind.Type)
+        decl.fail(
+            "#[check] on a type takes the rule, the field it reports at, a message and a code - typed decorator arguments (01-checker step 24), which are not in yet",
+        );
+    if (decl.kind != DeclKind.Field && decl.kind != DeclKind.Type)
+        decl.fail("#[check] must annotate a field");
+}
+
+// `z.array(z.email())`: a marker applied to every item of an `Array<T>` or a
+// `Set<T>`, each item's violation at its own path (`guests[1]`). One marker per
+// `#[each]`, written again for the next; a marker that takes arguments waits on
+// the variadic parameter (decision 267).
+//
+// LANGUAGE GAP: `Decorator` (decision 268) is an unknown type in a package
+// module reached by `mod` (`unknown type 'Decorator'`), and a decorator's name
+// is assignable to no other parameter type (`argument 1 must be unknown`), so
+// the marker is named as text — `#[each("email")]` — until it is; a name that
+// is no marker is refused by `#[validated]`.
+pub fn each(comptime decl: @Decl, comptime marker: string) {
+    if (decl.kind != DeclKind.Field) decl.fail("#[each] must annotate a field");
 }

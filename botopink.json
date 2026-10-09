@@ -18,6 +18,7 @@
     "spi.bp",
     "constraints.bp",
     "binding.bp",
+    "codecs.bp",
     "decorators.bp"
   ]
 }

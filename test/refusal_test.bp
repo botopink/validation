@@ -359,6 +359,43 @@ pub type Bad(
     );
 }
 
+// ── step 8: field markers that take a function or a marker ─────────────────
+
+test "validation: #[each] on a field that is not a collection, or naming no marker, is refused" {
+    val scalar = checked(
+        "validated_each_scalar",
+        """import {decorators.validated, decorators.each} from "validation";
+import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
+
+#[validated]
+pub type Bad(
+    #[each("email")] contact: string,
+)
+""",
+    );
+    assert refusedWith(
+        scalar,
+        "#[each] on field `contact` of `Bad`: it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `string`",
+        "4:3",
+    );
+    val noMarker = checked(
+        "validated_each_unknown",
+        """import {decorators.validated, decorators.each} from "validation";
+import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
+
+#[validated]
+pub type Bad(
+    #[each("nope")] contacts: Array<string>,
+)
+""",
+    );
+    assert refusedWith(
+        noMarker,
+        "#[each] on field `contacts` of `Bad`: `nope` is not a marker #[each] can apply to an item",
+        "4:3",
+    );
+}
+
 // ── every marker on a field type it cannot check ────────────────────────────
 //
 // One row per marker of `decorators.markerNames()`: the marker, its arguments
