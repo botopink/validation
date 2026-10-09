@@ -1,0 +1,87 @@
+//// validation — the order a message resolves in (front 125 step 7).
+////
+//// A module of its own: `#[message]` (the decorator) and `messages.message`
+//// (the renderer) share a name, and one module binds only one of them.
+
+import {messages.MessageSource, messages.setMessageSource, messages.builtInOnly, messages.templateFor, messages.builtInTemplate};
+import {messages.useParseSource, messages.clearParseSource};
+import {report.Violation, report.ValidationReport};
+import {decorators.schema, decorators.validated, decorators.minLength, decorators.message, decorators.typeMessage};
+import {schemas};
+import {schemas.Schema};
+import {constraints.vMinLength, table.constraintTableJson};
+import {json, json.Json} from "std";
+
+// ── step 7: the resolution order ────────────────────────────────────────────
+//
+// surface.md § 5: `#[message]` → `#[typeMessage]` → the per-parse source →
+// the installed source's locale key → its bare key → the built-in template.
+// One row per level, each written so that it overrides every level after it.
+
+fn tableSource(
+    locale: string,
+    rows: Array<#(string, string)>,
+) -> MessageSource {
+    return MessageSource(locale: { -> locale }, template: { key ->
+        rows.filter({ r -> r[0] == key }).map({ r -> r[1] }).join("");
+    });
+}
+
+test "validation: the six levels of a message resolve in order" {
+    // 6 — nothing installed: the built-in template.
+    val _a = setMessageSource(builtInOnly());
+    assert templateFor("required", builtInTemplate("required"))
+        == "must be present";
+    // 5 — the installed source's bare key over the built-in one.
+    val _b = setMessageSource(tableSource("", [#("required", "bare")]));
+    assert templateFor("required", builtInTemplate("required")) == "bare";
+    // 4 — its locale key over its bare key.
+    val _c = setMessageSource(
+        tableSource("pt", [#("pt.required", "local"), #("required", "bare")]),
+    );
+    assert templateFor("required", builtInTemplate("required")) == "local";
+    // 3 — the per-parse source over the installed one, locale key included.
+    val _d = useParseSource(tableSource("", [#("required", "per-parse")]));
+    assert templateFor("required", builtInTemplate("required")) == "per-parse";
+    val _e = clearParseSource();
+    assert templateFor("required", builtInTemplate("required")) == "local";
+    // 2 — `#[typeMessage]` over every source, for the field's `invalidType`.
+    // 1 — `#[message]` over every source, for the marker it follows.
+    val doc = try json.decode("""{"name": 7, "code": "ab"}""") catch Json.Null;
+    val _f = useParseSource(
+        tableSource(
+            "",
+            [
+                #("invalidType", "per-parse type"),
+                #("minLength", "per-parse length"),
+            ],
+        ),
+    );
+    val typed = parseLevels(doc);
+    val _g = clearParseSource();
+    assert levelMessages(typed) == "name: the type's own";
+    val short = try json.decode(
+        """{"name": "n", "code": "ab"}""",
+    ) catch Json.Null;
+    val _h = useParseSource(
+        tableSource("", [#("minLength", "per-parse length")]),
+    );
+    val checked = parseLevels(short);
+    val _i = clearParseSource();
+    assert levelMessages(checked) == "code: the check's own";
+    val _z = setMessageSource(builtInOnly());
+}
+
+#[schema]
+#[validated]
+pub type Levels(
+    #[typeMessage("the type's own")] name: string,
+    #[minLength(3)] #[message("the check's own")] code: string,
+)
+
+fn levelMessages(r: @Result<Levels, ValidationReport>) -> string {
+    return schemas
+        .violationsOf(r)
+        .map({ v -> v.field + ": " + v.message })
+        .join(" | ");
+}

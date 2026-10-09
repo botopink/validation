@@ -61,6 +61,37 @@ pub fn messageSource() -> MessageSource {
     return messageSourceOr(builtInOnly());
 }
 
+// ── the per-parse source ────────────────────────────────────────────────────
+//
+// `Schema.parseWith(input, source)` (Zod's `.parse(x, { error })`): a source
+// for one call, consulted before the installed one and falling back to it. It
+// is held where the call runs — the process dictionary on erlang (key
+// `{validation, parse}`), the `parse` member of the node cell (read as absent
+// when never set, so the cell's init literal is unchanged) — and cleared when
+// the call returns.
+
+#[@External.Node("""(function(__S){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = __S; return 0; })($0)""")]
+#[@External.Erlang("""(fun(VaS__) -> put({validation, parse}, VaS__), 0 end)($0)""")]
+declare fn putParseSource(source: MessageSource) -> i32;
+
+#[@External.Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = null; return 0; })()""")]
+#[@External.Erlang("""(fun() -> erase({validation, parse}), 0 end)()""")]
+declare fn dropParseSource() -> i32;
+
+#[@External.Node("""(function(__D){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return (__V.parse === undefined || __V.parse === null) ? __D : __V.parse; })($0)""")]
+#[@External.Erlang("""(fun(VaD__) -> case get({validation, parse}) of undefined -> VaD__; VaP__ -> VaP__ end end)($0)""")]
+declare fn parseSourceOr(fallback: MessageSource) -> MessageSource;
+
+// `source` for the parse that follows, consulted before the installed one —
+// its locale key, then its bare key (`templateFor`).
+pub fn useParseSource(source: MessageSource) -> i32 {
+    return putParseSource(source);
+}
+
+pub fn clearParseSource() -> i32 {
+    return dropParseSource();
+}
+
 // One placeholder binding. `name` is written without the braces.
 pub type Arg(
     name: string,
@@ -80,14 +111,21 @@ pub fn currentLocale() -> string {
 // The template for `code`, in resolution order. `builtIn` is step 3 and is
 // always non-empty, so this never answers `""` for a known code.
 pub fn templateFor(code: string, builtIn: string) -> string {
-    val src = messageSource();
+    val perParse = lookupIn(parseSourceOr(builtInOnly()), code);
+    if (perParse != "") return perParse;
+    val installed = lookupIn(messageSource(), code);
+    if (installed != "") return installed else return builtIn;
+}
+
+// A source's template for `code`: its locale key, then its bare key; `""`
+// when it holds neither.
+fn lookupIn(src: MessageSource, code: string) -> string {
     val loc = src.locale;
     val lookup = src.template;
     val current = loc();
     val localized = if (current == "") "" else lookup(current + "." + code);
     if (localized != "") return localized;
-    val global = lookup(code);
-    if (global != "") return global else return builtIn;
+    return lookup(code);
 }
 
 // Substitution by name. Unknown placeholders survive verbatim because nothing

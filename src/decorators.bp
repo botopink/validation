@@ -63,6 +63,8 @@ pub fn validated(comptime decl: @Decl) {
     var problem = "";
     decl.fields.forEach({ f ->
         val names = f.annotations.map({ a -> a.name });
+        var fieldCalls: Array<string> = [];
+        var fieldGuards: Array<string> = [];
         f.annotations.forEach({ a ->
             val declared = f.typeName;
             val nullable = declared.startsWith("?");
@@ -234,15 +236,68 @@ pub fn validated(comptime decl: @Decl) {
                     + why;
             val suffix = if (bare == "") "" else "|" + bare;
             val guard = if (nullable && n != "notNull")
-                "if (" + base + " != null) "
+                base + " != null"
             else
                 "";
-            if (call != "")
-                calls.push(
-                    "    " + guard + "__vs = __vs.append(" + call + ");",
-                );
+            if (call != "") {
+                fieldCalls.push(call);
+                fieldGuards.push(guard);
+            }
             if (call != "") rows.push(f.name + "|" + n + suffix);
+            if (n == "message") {
+                val count = fieldCalls.length;
+                if (count == 0)
+                    problem = "#[message] on field `"
+                        + f.name
+                        + "` of `"
+                        + decl.name
+                        + "`: it restates the marker before it, and none comes before it";
+                if (count > 0)
+                    fieldCalls = fieldCalls
+                        .slice(0, count - 1)
+                        .append(
+                            [
+                                "Violation.restated("
+                                    + fieldCalls
+                                        .slice(count - 1, count)
+                                        .join("")
+                                    + ", "
+                                    + raw
+                                    + ")",
+                            ],
+                        );
+            }
         });
+        val stop = names.indexOf("stopOnFirst") >= 0;
+        if (stop && fieldCalls.length < 2)
+            problem = "#[stopOnFirst] on field `"
+                + f.name
+                + "` of `"
+                + decl.name
+                + "`: it skips the checks after the first failure, and this field has fewer than two";
+        var elements: Array<string> = [];
+        var k = 0;
+        while (k < fieldCalls.length) {
+            val c = fieldCalls.slice(k, k + 1).join("");
+            val g = fieldGuards.slice(k, k + 1).join("");
+            if (stop)
+                elements.push(
+                    if (g == "")
+                        c
+                    else
+                        "Violation.onlyIf(" + g + ", " + c + ")",
+                );
+            val guarded = if (g == "") "" else "if (" + g + ") ";
+            if (stop == false)
+                calls.push("    " + guarded + "__vs = __vs.append(" + c + ");");
+            k = k + 1;
+        }
+        if (stop)
+            calls.push(
+                "    __vs = __vs.append(Violation.firstFailing(["
+                    + elements.join(", ")
+                    + "]));",
+            );
     });
     val parsed = decl.annotations.filter({ a -> a.name == "schema" }).length
         > 0;
@@ -298,6 +353,7 @@ fn decodeMarkers() -> Array<string> {
         "uppercased",
         "normalized",
         "normalizedUrl",
+        "typeMessage",
     ];
 }
 
@@ -1895,6 +1951,18 @@ pub fn schema(comptime decl: @Decl) {
             );
         }
         if (outer != "") call = outer + "(" + source + ", " + path + ")";
+        val typeMessage = f.annotations
+            .filter({ a -> a.name == "typeMessage" })
+            .map({ a -> a.args.join("") })
+            .join("");
+        if (typeMessage != "")
+            call = "schemas.typeRestated("
+                + call
+                + ", "
+                + path
+                + ", "
+                + typeMessage
+                + ")";
         if (isRest == false)
             hints.push(
                 "#(\"" + f.name + "\", \"" + formHint(declared, names) + "\")",
@@ -2124,4 +2192,30 @@ pub fn normalized(comptime decl: @Decl, comptime form: string) {
 pub fn normalizedUrl(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[normalizedUrl] must annotate a field");
+}
+
+// ── step 7: messages ────────────────────────────────────────────────────────
+
+// `.min(8, "Too short!")`: the text the marker just before it reports instead
+// of its template.
+pub fn message(comptime decl: @Decl, comptime text: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[message] must annotate a field");
+    val problem = textArgProblem("message", "text", text);
+    if (problem != "") decl.fail(problem);
+}
+
+// `z.string("Not a string!")`: the text the field's `invalidType` reports.
+pub fn typeMessage(comptime decl: @Decl, comptime text: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[typeMessage] must annotate a field");
+    val problem = textArgProblem("typeMessage", "text", text);
+    if (problem != "") decl.fail(problem);
+}
+
+// `{ abort: true }`: the field's checks run in the order written, and only the
+// first that fails is reported.
+pub fn stopOnFirst(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[stopOnFirst] must annotate a field");
 }

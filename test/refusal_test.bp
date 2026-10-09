@@ -322,6 +322,43 @@ pub type Bad(
     );
 }
 
+// ── step 7: messages ────────────────────────────────────────────────────────
+
+test "validation: #[message] with no marker before it, and #[stopOnFirst] over one check, are refused" {
+    val lone = checked(
+        "validated_message_alone",
+        """import {decorators.validated, decorators.message, decorators.notBlank} from "validation";
+import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
+
+#[validated]
+pub type Bad(
+    #[message("x")] #[notBlank] name: string,
+)
+""",
+    );
+    assert refusedWith(
+        lone,
+        "#[message] on field `name` of `Bad`: it restates the marker before it, and none comes before it",
+        "4:3",
+    );
+    val single = checked(
+        "validated_stop_on_first_single",
+        """import {decorators.validated, decorators.stopOnFirst, decorators.notBlank} from "validation";
+import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
+
+#[validated]
+pub type Bad(
+    #[stopOnFirst] #[notBlank] name: string,
+)
+""",
+    );
+    assert refusedWith(
+        single,
+        "#[stopOnFirst] on field `name` of `Bad`: it skips the checks after the first failure, and this field has fewer than two",
+        "4:3",
+    );
+}
+
 // ── every marker on a field type it cannot check ────────────────────────────
 //
 // One row per marker of `decorators.markerNames()`: the marker, its arguments

@@ -29,7 +29,7 @@
 //// `language-gaps.md`), and a lambda only ever CALLS a decoder.
 
 import {report.Violation, report.ValidationReport, report.violation};
-import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate};
+import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate, messages.MessageSource, messages.useParseSource, messages.clearParseSource};
 import {path.key, path.index};
 import {formats.isIsoDatetime, formats.isIsoDatetimeOffset};
 import {json, json.Json, collections.Dict, collections.Set, io.clock, unicode, unicode.NormalizationForm, url} from "std";
@@ -58,6 +58,21 @@ pub type Schema<T>(
     // root, coded `invalidJson`, with the reader's own reason.
     pub fn decode(self: Self<T>, text: string) -> @Result<T, ValidationReport> {
         return try decodeText(text, self.run);
+    }
+
+    // `.parse(x, { error })`: the same, its messages from `source` first and
+    // the installed source after (`messages.useParseSource`); a field's own
+    // `#[message]` / `#[typeMessage]` still wins.
+    pub fn parseWith(
+        self: Self<T>,
+        input: Json,
+        source: MessageSource,
+    ) -> @Result<T, ValidationReport> {
+        val decoder = self.run;
+        val _in = useParseSource(source);
+        val r = decoder(input, "");
+        val _out = clearParseSource();
+        return try r;
     }
 
     // Whether the document decodes — for a caller that wants the answer and
@@ -823,4 +838,25 @@ fn formValue(values: Array<string>, hint: string) -> Json {
 fn formScalar(text: string, hint: string) -> Json {
     if (hint == "raw") return Json.Str(text);
     return fromText(text, hint);
+}
+
+// ── step 7: messages ────────────────────────────────────────────────────────
+
+// `#[typeMessage("…")]`: the `invalidType` a field's own value answers, under
+// the field's text.
+pub fn typeRestated<T>(
+    r: @Result<T, ValidationReport>,
+    at: string,
+    text: string,
+) -> @Result<T, ValidationReport> {
+    val vs = violationsOf(r);
+    if (vs.length == 0) return try r;
+    throw ValidationReport(
+        violations: vs.map({ v ->
+            if (v.code == "invalidType" && v.field == at)
+                violation(v.field, v.code, text, v.invalidValue)
+            else
+                v;
+        }),
+    );
 }

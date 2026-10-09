@@ -30,7 +30,35 @@ pub type Violation(
     code: string,
     message: string,
     invalidValue: string,
-)
+) {
+    // `#[message("…")]`: the violations of the marker it follows, under the
+    // text the field gives instead of the template.
+    pub fn restated(vs: Array<Violation>, text: string) -> Array<Violation> {
+        return vs.map({ v ->
+            Violation(
+                field: v.field,
+                code: v.code,
+                message: text,
+                invalidValue: v.invalidValue,
+            );
+        });
+    }
+
+    // A check of an optional field under `#[stopOnFirst]`: its violations
+    // when the value is present, none when it is null.
+    pub fn onlyIf(present: bool, vs: Array<Violation>) -> Array<Violation> {
+        val none: Array<Violation> = [];
+        if (present) return vs else return none;
+    }
+
+    // `#[stopOnFirst]`: the violations of the first check that answered any,
+    // in the order the field writes its markers; none when every check passed.
+    pub fn firstFailing(lists: Array<Array<Violation>>) -> Array<Violation> {
+        val failing = lists.filter({ vs -> vs.length > 0 });
+        val none: Array<Violation> = [];
+        return failing.at(0) ?? none;
+    }
+}
 
 pub type ValidationReport(
     violations: Array<Violation>,

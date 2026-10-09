@@ -36,19 +36,22 @@ validation/
 ├── src/
 │   ├── root.bp         pub mod path; report; table; messages; schemas; spi; formats; constraints; binding; decorators
 │   ├── path.bp         root, key, index, segments, head — the path a violation's `field` is
-│   ├── report.bp       Violation, ValidationReport (isValid, merge, toJson, toProblemDetail, empty, of),
+│   ├── report.bp       Violation (restated, onlyIf, firstFailing), ValidationReport (isValid, merge,
+│   │                   toJson, toProblemDetail, empty, of),
 │   │                   violationJson, violation, noViolation, oneViolation
 │   ├── table.bp        constraintTableJson and the blob grammar (splitBlob, paramNames, paramIsNumber,
 │   │                   renderParam, constraintJson, fieldJson)
 │   ├── messages.bp     Arg, arg, noArgs, MessageSource, setMessageSource, builtInOnly, messageSource,
-│   │                   currentLocale, templateFor, interpolate, message, builtInTemplate, showI32/I64/F64
-│   ├── schemas.bp      Schema<T> (parse, parseAt, decode, accepts, optional, array), of, text, int, long,
+│   │                   useParseSource, clearParseSource, currentLocale, templateFor, interpolate,
+│   │                   message, builtInTemplate, showI32/I64/F64
+│   ├── schemas.bp      Schema<T> (parse, parseAt, parseWith, decode, accepts, optional, array), of, text, int, long,
 │   │                   float, boolean, anyJson; the decoders decodeString/Int/Long/Float/Bool/Json,
 │   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
 │   │                   `#[schema]` calls: memberPath, indexPath, objectProblems, unknownKeys,
 │   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
 │   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields,
-│   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument;
+│   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument,
+│   │                   typeRestated;
 │   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
@@ -61,10 +64,11 @@ validation/
 │   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
 │                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
 │                       #[orElseOf], #[fallback], #[fallbackOf], #[coerce], #[stringbool], #[trim],
-│                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl]
+│                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl], #[message],
+│                       #[typeMessage], #[stopOnFirst]
 └── test/             binding · checks_and_formats_example · coercion_and_forms_example · collections_example · constraints ·
-                      enums_and_unions_example · messages · nested_and_arrays_example ·
-                      object_policy_example · parity · path ·
+                      enums_and_unions_example · message_order · messages · nested_and_arrays_example ·
+                      object_policy_example · parity · path · refine_and_messages_example ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
                       spi · table   (suite `validation:`)
 ```
@@ -85,7 +89,17 @@ pub fn builtInOnly() -> MessageSource      // in force until a source is set
 
 `templateFor(code, builtIn)` asks `template(locale() + "." + code)` when the
 locale is not `""`, then `template(code)`, then answers `builtIn`. A `""` from
-the source means "no entry". rakun installs a source over its own property keys
+the source means "no entry". A per-parse source (`Schema.parseWith(input,
+source)`, `useParseSource` / `clearParseSource`) is asked the same two keys
+first, for the one call; it lives in the process dictionary on erlang (key
+`{validation, parse}`) and in the node cell's `parse` member, which is read as
+absent when never set, so the cell's init literal is unchanged. Above every
+source: a field's `#[message("…")]` restates the marker just before it
+(`Violation.restated`), `#[typeMessage("…")]` its decoder's `invalidType`
+(`schemas.typeRestated`) — `test/message_order_test.bp` holds the six levels.
+`#[stopOnFirst]` on a field reports only the first of its checks that fails
+(`Violation.firstFailing`); with fewer than two checks it is refused, and so is
+a `#[message]` with no marker before it. rakun installs a source over its own property keys
 at boot (rakun front 14 Step 7); onze installs the browser's in the entry it
 generates (front 68).
 

@@ -1,0 +1,91 @@
+// The suite case of the front's example, but for the import lines and for
+// the type-level `#[check(rule, at: .field, …)]`: its arguments are a function
+// value and a field reference (decision 280), which wait on typed decorator
+// arguments (`01-checker` step 24) — its cases are not here yet.
+//
+// Front 125 — validation: Zod's feature set · examples/refine-and-messages-example.bp
+//
+// Demonstrates: step 7 — the messages a check reports.
+//
+//   z.string().min(8, "Too short!")              // a check-level message
+//   z.string("Not a string!")                    // a schema-level message
+//   schema.parse(x, { error: iss => "…" })       // a per-parse message
+//   z.config({ customError })                    // a global one
+//
+// Upstream: ZOD_DOCUMENTATION.md §§ 4.31 (Refinements), 5 (Personalizando Erros)
+//           — https://zod.dev/api#refinements · https://zod.dev/error-customization
+//
+// Target: both.
+
+import {decorators.schema, decorators.validated, decorators.minLength, decorators.message, decorators.typeMessage, decorators.stopOnFirst, decorators.lowercase};
+import {schemas};
+import {schemas.Schema, report.ValidationReport, report.Violation};
+import {constraints.vMinLength, constraints.vLowercase, table.constraintTableJson};
+import {messages.MessageSource, messages.setMessageSource, messages.builtInOnly};
+import {json, json.Json} from "std";
+
+#[schema]
+#[validated]
+pub type Account(
+    #[typeMessage("a handle is text")] handle: string,
+    // Zod's `abort: true` — the second check is skipped when the first fails.
+    #[stopOnFirst] #[minLength(8)] #[message("Too short!")] #[lowercase] #[message("Must be lowercase")] password: string,
+    confirm: string,
+)
+
+fn messagesOf(r: @Result<Account, ValidationReport>) -> string {
+    return case r {
+        Ok(_) -> "";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ": " + v.message })
+            .join(" | ");
+    };
+}
+
+test "validation: a check-level message replaces the built-in one" {
+    val _s = setMessageSource(builtInOnly());
+    val r = decodeAccount(
+        """{"handle": "ana", "password": "short", "confirm": "short"}""",
+    );
+    assert messagesOf(r) == "password: Too short!";
+}
+
+test "validation: #[stopOnFirst] skips the checks after the first failure" {
+    // "SHORT" fails both minLength and lowercase; only the first is reported.
+    val r = decodeAccount(
+        """{"handle": "ana", "password": "SHORT", "confirm": "SHORT"}""",
+    );
+    assert messagesOf(r) == "password: Too short!";
+    val long = decodeAccount(
+        """{"handle": "ana", "password": "LONG-ENOUGH", "confirm": "x"}""",
+    );
+    assert messagesOf(long) == "password: Must be lowercase";
+}
+
+test "validation: a schema-level message restates the wrong-type case" {
+    val r = decodeAccount(
+        """{"handle": 7, "password": "correct-horse", "confirm": "correct-horse"}""",
+    );
+    assert messagesOf(r) == "handle: a handle is text";
+}
+
+test "validation: a per-parse source sits under the field's own message and over the global one" {
+    val _s = setMessageSource(builtInOnly());
+    val portuguese = MessageSource(
+        locale: { -> "" },
+        template: { key -> if (key == "required") "é obrigatório" else "" },
+    );
+    val doc = try json.decode("""{"handle": "ana", "password": "short"}""");
+    val r = schemaOfAccount().parseWith(doc, portuguese);
+    assert messagesOf(r) == "confirm: é obrigatório";
+    val short = try json.decode(
+        """{"handle": "ana", "password": "short", "confirm": "x"}""",
+    );
+    assert messagesOf(schemaOfAccount().parseWith(short, portuguese))
+        == "password: Too short!";
+    // The source was for that call only.
+    assert messagesOf(
+        decodeAccount("""{"handle": "ana", "password": "correct-horse"}"""),
+    )
+        == "confirm: must be present";
+}
