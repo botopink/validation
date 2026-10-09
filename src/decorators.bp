@@ -1764,9 +1764,11 @@ fn regexEscaped(s: string) -> string {
         .join("");
 }
 
-// A literal lexeme as the `Json` it is: text, a boolean or a number.
+// A literal lexeme as the `Json` it is: text, a boolean, a number, or an
+// enum's variant (`.Tuna`, written as its name).
 fn literalJson(l: string) -> string {
     if (l.startsWith("\"")) return jsStr(unquoted(l));
+    if (l.startsWith(".")) return jsStr(l.slice(1, l.length()));
     if (l == "true" || l == "false") return "Json.Bool(" + l + ")";
     return jsNum(l);
 }
@@ -2350,7 +2352,17 @@ fn literalFor(l: string, t: string, declared: string) -> string {
         if (l == "true" || l == "false") return l;
         return "!the literal `" + l + "` is not a `bool`";
     }
-    return "!a literal applies to `string`, `i32`, `i64`, `f64` and `bool` fields, and this field is `"
+    if (schemaIsDeclared(t)) {
+        val variant = l.slice(1, l.length());
+        if (l.startsWith(".") && schemaIsName(variant))
+            return t + "." + variant;
+        return "!a value of `"
+            + t
+            + "` is one of its variants, written `.Variant`, and this is `"
+            + l
+            + "`";
+    }
+    return "!a literal applies to `string`, `i32`, `i64`, `f64`, `bool` and enum fields, and this field is `"
         + declared
         + "`";
 }
@@ -2938,9 +2950,10 @@ pub fn present(comptime decl: @Decl) {
         decl.fail("#[present] must annotate a field");
 }
 
-// `.default(v)`: an absent (or `null`) key takes the literal, which is a value
-// of the field's type.
-pub fn orElse(comptime decl: @Decl, comptime value: string | i32 | f64 | bool) {
+// `.default(v)`: an absent (or `null`) key takes the value, of the field's
+// type — a literal, or an enum's variant by reference (`#[orElse(.Tuna)]`,
+// decisions 280 (2), 281).
+pub fn orElse<T>(comptime decl: @Decl<T>, comptime value: T) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[orElse] must annotate a field");
 }
@@ -2953,11 +2966,9 @@ pub fn orElseOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
 }
 
 // `.catch(v)`: a value that does not decode, or fails its checks, is replaced
-// by the literal and no violation is recorded for it.
-pub fn fallback(
-    comptime decl: @Decl,
-    comptime value: string | i32 | f64 | bool,
-) {
+// by the value — of the field's type, as `#[orElse]`'s — and no violation is
+// recorded for it.
+pub fn fallback<T>(comptime decl: @Decl<T>, comptime value: T) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[fallback] must annotate a field");
 }

@@ -629,3 +629,22 @@ test "validation: nested records, optionals, lists, unions, sets and dicts round
     val envAgain = try parseEnvelope(try encodeEnvelope(env));
     assert envAgain.fields.keys().join(",") == "x,y";
 }
+
+// ── step 11: a variant by reference ─────────────────────────────────────────
+
+#[schema]
+pub type Bait { Worm, Fly, Lure }
+
+#[schema]
+pub type Rig(
+    #[orElse(.Fly)] bait: Bait,
+    #[fallback(.Worm)] spare: Bait,
+)
+
+test "validation: an enum default and fallback are its variants, by reference" {
+    val doc = try json.decode("""{"spare": "Plastic"}""") catch Json.Null;
+    val rig = try parseRig(doc);
+    assert rig.bait == Bait.Fly;
+    assert rig.spare == Bait.Worm;
+    assert jsonSchemaOfRig().contains("\"default\":\"Fly\"");
+}

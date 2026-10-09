@@ -259,9 +259,12 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   checks, with no violation (the record is built, validated, rebuilt with the
   fallback of every such field, and validated again). A literal is a value of
   the field's type — `string`, `i32`, `i64` (emitted as `schemas.widened(n.0)`),
-  `f64`, `bool`, or their `?T` — or the marker is refused at the field; a
-  function is named as text until decorator arguments are typed (decision
-  281). Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
+  `f64`, `bool`, an enum's variant by reference (`#[orElse(.Tuna)]` on a `Fish`
+  field, emitted `Fish.Tuna` — decision 281, step 11), or their `?T` — or the
+  marker is refused at the field; `#[orElseOf(f)]` / `#[fallbackOf(f)]` take the
+  function itself. The markers declare 280's shape (`orElse<T>(decl: @Decl<T>,
+  value: T)`); until decorator arguments are typed (`01-checker` step 24) a
+  variant the enum does not have fails where the emitted code names it. Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
   is not `Dict<string, T>` or twice, `#[rest]` beside `#[stripUnknown]`, a
   default beside `#[rest]` / `#[present]`.
 - **Coercion, transforms, the form binder** (step 6). `#[coerce]` on a
