@@ -1,5 +1,5 @@
 // The suite case of the front's example, byte for byte but for the import
-// lines: a module of this package names it by path (`import {schemas};`,
+// lines: a module of this package names it by path (`import {derived};`,
 // decision 206), an application by `from "validation"`.
 //
 // Front 125 — validation: Zod's feature set · examples/enums-and-unions-example.bp
@@ -22,17 +22,16 @@
 // Target: both. `z.xor` is `n/a (306)`: an ad-hoc union is a declared type,
 // and a declared union takes its first accepting arm.
 
-import {decorators.schema, decorators.validated, decorators.literal, decorators.oneOf, decorators.tag};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation};
+import {decorators.validated, decorators.literal, decorators.oneOf, decorators.tag};
+import {derived};
+import {report.ValidationReport, report.Violation};
 import {constraints.vLiteral, constraints.vOneOf, table.constraintTableJson};
 import {json.Json} from "std";
 
 // `z.enum([...])` — the variant's name is the wire value.
-#[schema]
+#[validated]
 pub type Fish { Salmon, Tuna, Trout }
 
-#[schema]
 #[validated]
 pub type Catch(
     fish: Fish,
@@ -46,19 +45,19 @@ pub type Catch(
 )
 
 // `z.discriminatedUnion("status", [...])`. Each variant's payload is a
-// `#[schema]` record named after the enum and the variant, and the enum's
+// `#[validated]` record named after the enum and the variant, and the enum's
 // decoder reads `status` first.
 //
 // LANGUAGE GAP: `Decl.variants` carries a variant's name and not its payload
 // fields, so the payload cannot be reflected from the enum itself; it is a
 // record the decoder reaches by name.
-#[schema]
+#[validated]
 pub type ReplySuccess(data: string)
 
-#[schema]
+#[validated]
 pub type ReplyFailed(error: string)
 
-#[schema]
+#[validated]
 #[tag("status")]
 pub type Reply {
     Success(value: ReplySuccess),
@@ -75,7 +74,7 @@ fn located(r: @Result<Catch, ValidationReport>) -> string {
 }
 
 test "validation: an enum decodes by variant name" {
-    val c = try decodeCatch(
+    val c = try Catch.decode(
         """{"fish": "Tuna", "unit": "kg", "gear": "rod", "tagId": 7}""",
     );
     val name = case c.fish {
@@ -88,25 +87,25 @@ test "validation: an enum decodes by variant name" {
 
 test "validation: a value outside the enum, the literal or the set is refused" {
     // `FishEnum.parse("Swordfish")` fails — ZOD_DOCUMENTATION.md § 4.11.
-    val r = decodeCatch(
+    val r = Catch.decode(
         """{"fish": "Swordfish", "unit": "lb", "gear": "hands", "tagId": 7}""",
     );
     assert located(r) == "fish:invalidValue";
-    val checked = decodeCatch(
+    val checked = Catch.decode(
         """{"fish": "Salmon", "unit": "lb", "gear": "hands", "tagId": 7}""",
     );
     assert located(checked) == "unit:literal,gear:oneOf";
 }
 
 test "validation: the options of an enum are its variants, in order" {
-    assert optionsOfFish().join(",") == "Salmon,Tuna,Trout";
+    assert Fish.options().join(",") == "Salmon,Tuna,Trout";
 }
 
 test "validation: a union takes the first arm that accepts" {
-    val byNumber = try decodeCatch(
+    val byNumber = try Catch.decode(
         """{"fish": "Tuna", "unit": "kg", "gear": "rod", "tagId": 7}""",
     );
-    val byText = try decodeCatch(
+    val byText = try Catch.decode(
         """{"fish": "Tuna", "unit": "kg", "gear": "rod", "tagId": "A-7"}""",
     );
     val n = byNumber.tagId;
@@ -116,14 +115,14 @@ test "validation: a union takes the first arm that accepts" {
 }
 
 test "validation: a union no arm accepts is one invalidUnion" {
-    val r = decodeCatch(
+    val r = Catch.decode(
         """{"fish": "Tuna", "unit": "kg", "gear": "rod", "tagId": true}""",
     );
     assert located(r) == "tagId:invalidUnion";
 }
 
 test "validation: a tagged enum dispatches on its tag" {
-    val ok = try decodeReply("""{"status": "Success", "data": "42"}""");
+    val ok = try Reply.decode("""{"status": "Success", "data": "42"}""");
     val text = case ok {
         Success(value) -> value.data;
         Failed(value) -> value.error;
@@ -132,7 +131,7 @@ test "validation: a tagged enum dispatches on its tag" {
 }
 
 test "validation: an unknown tag names the tags that exist" {
-    val r = decodeReply("""{"status": "Pending"}""");
+    val r = Reply.decode("""{"status": "Pending"}""");
     val message = case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -143,14 +142,14 @@ test "validation: an unknown tag names the tags that exist" {
 }
 
 test "validation: an enum and a tagged enum encode as they decode" {
-    val c = try decodeCatch(
+    val c = try Catch.decode(
         """{"fish": "Trout", "unit": "kg", "gear": "net", "tagId": "x"}""",
     );
-    val again = try parseCatch(try encodeCatch(c));
+    val again = try Catch.parse(try Catch.encode(c));
     assert again.fish == Fish.Trout;
     assert again.tagId is string;
-    val reply = try decodeReply("""{"status": "Failed", "error": "boom"}""");
-    val back = try parseReply(try encodeReply(reply));
+    val reply = try Reply.decode("""{"status": "Failed", "error": "boom"}""");
+    val back = try Reply.parse(try Reply.encode(reply));
     val text = case back {
         Success(value) -> value.data;
         Failed(value) -> value.error;

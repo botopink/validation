@@ -1,5 +1,5 @@
 // The suite case of the front's example, byte for byte but for the import
-// lines: a module of this package names it by path (`import {schemas};`,
+// lines: a module of this package names it by path (`import {derived};`,
 // decision 206), an application by `from "validation"`.
 //
 // Front 125 — validation: Zod's feature set · examples/collections-example.bp
@@ -22,16 +22,15 @@
 // `n/a (306)`: no declaration says them, and the combinators that did are
 // private.
 
-import {decorators.schema, decorators.validated, decorators.exhaustive, decorators.maxLength, decorators.notEmpty};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation};
+import {decorators.validated, decorators.exhaustive, decorators.maxLength, decorators.notEmpty};
+import {derived};
+import {report.ValidationReport, report.Violation};
 import {constraints.vNotEmptySet, constraints.vMaxLengthSet, table.constraintTableJson};
 import {collections.Dict, collections.Set, json.Json} from "std";
 
-#[schema]
+#[validated]
 pub type Key { Id, Name }
 
-#[schema]
 #[validated]
 pub type Sheet(
     // a JSON array of exactly three items, typed by position
@@ -44,7 +43,7 @@ pub type Sheet(
     #[notEmpty] #[maxLength(5)] tags: Set<string>,
 )
 
-#[schema]
+#[validated]
 pub type Ranks(
     // numeric keys: the key text read by the integer grammar
     byPlace: Dict<i32, string>,
@@ -62,7 +61,7 @@ fn located(r: @Result<Sheet, ValidationReport>) -> string {
 }
 
 test "validation: a tuple is positional and exactly as long as its type" {
-    val sheet = try decodeSheet(
+    val sheet = try Sheet.decode(
         """{"origin": ["A1", 2.5, true], "labels": {"a": "b"},
             "columns": {"Id": "#", "Name": "name"}, "tags": ["x", "y"]}""",
     );
@@ -73,13 +72,13 @@ test "validation: a tuple is positional and exactly as long as its type" {
 }
 
 test "validation: each position of a tuple is its own path" {
-    val r = decodeSheet(
+    val r = Sheet.decode(
         """{"origin": ["A1", "2.5"], "labels": {},
             "columns": {"Id": "#", "Name": "name"}, "tags": ["x"]}""",
     );
     assert located(r) == "origin:invalidType";
 
-    val wrongItem = decodeSheet(
+    val wrongItem = Sheet.decode(
         """{"origin": ["A1", "2.5", true], "labels": {},
             "columns": {"Id": "#", "Name": "name"}, "tags": ["x"]}""",
     );
@@ -87,7 +86,7 @@ test "validation: each position of a tuple is its own path" {
 }
 
 test "validation: a record member is addressed by its key" {
-    val r = decodeSheet(
+    val r = Sheet.decode(
         """{"origin": ["A1", 1, true], "labels": {"a": 1},
             "columns": {"Id": "#", "Name": "name"}, "tags": ["x"]}""",
     );
@@ -95,12 +94,12 @@ test "validation: a record member is addressed by its key" {
 }
 
 test "validation: an exhaustive record needs every variant; a key outside the enum is refused" {
-    val missing = decodeSheet(
+    val missing = Sheet.decode(
         """{"origin": ["A1", 1, true], "labels": {}, "columns": {"Id": "#"}, "tags": ["x"]}""",
     );
     assert located(missing) == "columns.Name:required";
 
-    val extra = decodeSheet(
+    val extra = Sheet.decode(
         """{"origin": ["A1", 1, true], "labels": {},
             "columns": {"Id": "#", "Name": "n", "Age": "a"}, "tags": ["x"]}""",
     );
@@ -108,7 +107,7 @@ test "validation: an exhaustive record needs every variant; a key outside the en
 }
 
 test "validation: a set reports the repeated item instead of folding it away" {
-    val r = decodeSheet(
+    val r = Sheet.decode(
         """{"origin": ["A1", 1, true], "labels": {},
             "columns": {"Id": "#", "Name": "n"}, "tags": ["x", "y", "x"]}""",
     );
@@ -116,7 +115,7 @@ test "validation: a set reports the repeated item instead of folding it away" {
 }
 
 test "validation: the markers of a set run on the decoded set" {
-    val r = decodeSheet(
+    val r = Sheet.decode(
         """{"origin": ["A1", 1, true], "labels": {},
             "columns": {"Id": "#", "Name": "n"}, "tags": []}""",
     );
@@ -124,12 +123,12 @@ test "validation: the markers of a set run on the decoded set" {
 }
 
 test "validation: a dict keyed by i32 or by an enum, partial" {
-    val ranks = try decodeRanks(
+    val ranks = try Ranks.decode(
         """{"byPlace": {"1": "ana", "2": "bia"}, "widths": {"Id": 4}}""",
     );
     assert ranks.byPlace.at(2) ?? "" == "bia";
     assert ranks.widths.size() == 1;
-    val bad = decodeRanks("""{"byPlace": {"one": "ana"}, "widths": {}}""");
+    val bad = Ranks.decode("""{"byPlace": {"one": "ana"}, "widths": {}}""");
     val codes = case bad {
         Ok(_) -> "";
         Error(report) -> report.violations

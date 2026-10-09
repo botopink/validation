@@ -4,8 +4,9 @@
 
 The `validation` library (decision 116 rule 5): constraint markers,
 `#[validated]`, the violation report, the constraint table, typed coercion, and
-— since `specs/1.0.11-beta/07-bundled-libs/125-validation-zod` — `#[schema]`,
-the decoder from a `Json` document to a typed record.
+— since `specs/1.0.11-beta/07-bundled-libs/125-validation-zod` — the parse half
+of `#[validated]`: the type's members from a `Json` document to a typed record
+and back, its form binder and its JSON Schema (decisions 306, 327).
 One source compiled for erlang and commonJS, so the server's handler and the
 client's form run the same predicate. Moved from rakun front 14's validation
 member (`repository/rakun/modules/rakun-validation`) by
@@ -33,7 +34,7 @@ validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
-│   ├── root.bp         pub mod path; report; table; messages; locales; schemas; spi; formats; constraints;
+│   ├── root.bp         pub mod path; report; table; messages; locales; derived; spi; formats; constraints;
 │   │                   binding; codecs; decorators
 │   ├── path.bp         root, key, index, segments, head, parts, joined, parent — the path a violation's
 │   │                   `field` is
@@ -45,20 +46,21 @@ validation/
 │   │                   renderParam, constraintJson, fieldJson); the JSON Schema dialects toDraft07,
 │   │                   toOpenApi30, withRefBase
 │   ├── messages.bp     Arg, arg, noArgs, MessageSource, setMessageSource, builtInOnly, messageSource,
-│   │                   useParseSource, clearParseSource, currentLocale, templateFor, interpolate,
+│   │                   useParseSource, clearParseSource, underSource, currentLocale, templateFor,
+│   │                   interpolate,
 │   │                   message, codes, builtInTemplate, showI32/I64/F64
 │   ├── locales.bp      en, ptBR, es — one `fn() -> MessageSource` each (`en` is the built-in table)
-│   ├── schemas.bp      Schema<T> (parse, parseAt, parseWith, decode, accepts, optional, array), of, text, int, long,
-│   │                   float, boolean, anyJson; the decoders decodeString/Int/Long/Float/Bool/Json,
-│   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
-│   │                   `#[schema]` calls: memberPath, indexPath, objectProblems, unknownKeys,
-│   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
+│   ├── derived.bp      what the members `#[validated]` adds call (no schema value — decision 306):
+│   │                   the decoders decodeString/Int/Long/Float/Bool/Json,
+│   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey;
+│   │                   memberPath, indexPath, objectProblems, unknownKeys, violationsOf, under,
+│   │                   underField, decodeText, required, variantName, noArm, tupleItems,
 │   │                   itemOf, absentKeys, without, presentOf, restOf, widened, failedFields,
 │   │                   coerced, decodeStringBool, transformText, transformOptional, formDocument,
-│   │                   typeRestated, transformEach; what `jsonOf<T>` calls: encodeInt, encodeLong,
+│   │                   typeRestated, transformEach; encoding: encodeInt, encodeLong,
 │   │                   encodeOptional, encodeArrayOf, encodeSetOf, encodeDictOf, intKeyText, textOfJson,
 │   │                   objectOf, membersOf, tagged (two more conversion cells: floatOfI32, floatOfI64);
-│   │                   what `jsonSchemaOf<T>` calls: hasDef, textArray, withTag, documentOf,
+│   │                   JSON Schema: hasDef, textArray, withTag, documentOf,
 │   │                   refsRenamed, refsPrefixed; the JSON writer jsonText, numberText
 │   │                   kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
@@ -77,8 +79,8 @@ validation/
 │   │                   textToBase64, base64urlToText / textToBase64url, hexToText / textToHex,
 │   │                   uriComponentToText / textToUriComponent, textToUrl / urlToText, textToBool /
 │   │                   boolToText (four conversion cells)
-│   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
-│                       #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
+│   └── decorators.bp   #[validated] (Form, transparent), the 73 constraint markers (`markerNames()`),
+│                       markerRule, the parse half (`parsing`); #[tag], #[exhaustive], #[stripUnknown], #[rest], #[present], #[orElse],
 │                       #[orElseOf], #[fallback], #[fallbackOf], #[coerce], #[stringbool], #[trim],
 │                       #[lowercased], #[uppercased], #[normalized], #[normalizedUrl], #[message],
 │                       #[typeMessage], #[stopOnFirst], #[preprocess], #[check], #[each], #[jsonSchema],
@@ -93,8 +95,8 @@ validation/
 ```
 
 `botopink.json`'s `files` order is a dependency order: a module is listed before
-the siblings that import it (`formats` before `schemas`, which coerces an ISO
-instant; `schemas` before `table` and `spi`, which write JSON Schema).
+the siblings that import it (`formats` before `derived`, which coerces an ISO
+instant; `derived` before `table` and `spi`, which write JSON Schema).
 
 ## The message source
 
@@ -109,14 +111,14 @@ pub fn builtInOnly() -> MessageSource      // in force until a source is set
 
 `templateFor(code, builtIn)` asks `template(locale() + "." + code)` when the
 locale is not `""`, then `template(code)`, then answers `builtIn`. A `""` from
-the source means "no entry". A per-parse source (`Schema.parseWith(input,
-source)`, `useParseSource` / `clearParseSource`) is asked the same two keys
+the source means "no entry". A per-parse source (`messages.underSource(source, { ->
+T.parse(doc) })`, over `useParseSource` / `clearParseSource`) is asked the same two keys
 first, for the one call; it lives in the process dictionary on erlang (key
 `{validation, parse}`) and in the node cell's `parse` member, which is read as
 absent when never set, so the cell's init literal is unchanged. Above every
 source: a field's `#[message("…")]` restates the marker just before it
 (`Violation.restated`), `#[typeMessage("…")]` its decoder's `invalidType`
-(`schemas.typeRestated`) — `test/message_order_test.bp` holds the six levels.
+(`derived.typeRestated`) — `test/message_order_test.bp` holds the six levels.
 `#[stopOnFirst]` on a field reports only the first of its checks that fails
 (`Violation.firstFailing`); with fewer than two checks it is refused, and so is
 a `#[message]` with no marker before it. The shipped locales are `locales.en()`, `locales.ptBR()` and `locales.es()`
@@ -128,7 +130,7 @@ generates (front 68).
 
 ## Host cells
 
-`schemas.bp` has five host cells that hold no state — `wholeI32`, `wholeI64`
+`derived.bp` has five host cells that hold no state — `wholeI32`, `wholeI64`
 (an `f64` already known whole and in range, as the integer it is), `isWhole`,
 and `floatOfI32` / `floatOfI64` (an integer as the `f64` a JSON number is) —
 because the language has no conversion between `f64` and the integers
@@ -191,45 +193,54 @@ field held to a closed set, the options comma-joined in one argument).
   which say the zones it takes.
 - **Every marker parameter is `comptime`**, as decision 280 (0) writes it.
 
-## `#[schema]` — a document in, a record out
+## The parse half of `#[validated]` — a document in, a record out
 
-`validate<TypeName>` checks a value that is already a record. `#[schema]` emits
-the step before it, named after the type as `#[validated]`'s functions are:
+The type is the only schema (decisions 306, 327): `#[validated]` gives the type,
+beside `validate()` and `constraints()`, the members that read and write it —
+there is no schema value, no `Schema<T>`, no `#[schema]`:
 
 ```bp
-pub fn parse<TypeName>At(input: Json, at: string) -> @Result<TypeName, ValidationReport>
-pub fn parse<TypeName>(input: Json) -> @Result<TypeName, ValidationReport>
-pub fn decode<TypeName>(text: string) -> @Result<TypeName, ValidationReport>
-pub fn bind<TypeName>(pairs: Array<#(string, string)>) -> @Result<TypeName, ValidationReport>   // a record
-pub fn jsonOf<TypeName>(v: TypeName) -> Json
-pub fn encode<TypeName>(v: TypeName) -> @Result<Json, ValidationReport>
-pub fn schemaNodeOf<TypeName>() -> Json
-pub fn schemaDefsOf<TypeName>(acc: Array<#(string, Json)>) -> Array<#(string, Json)>
-pub fn schemaIdOf<TypeName>() -> string
-pub fn jsonSchemaOf<TypeName>() -> string
-pub fn schemaOf<TypeName>() -> Schema<TypeName>
-pub fn optionsOf<TypeName>() -> Array<string>                                                   // an enum
+Player.parse(input: Json) -> @Result<Player, ValidationReport>
+Player.parseAt(input: Json, at: string) -> @Result<Player, ValidationReport>   // under the path `at`
+Player.decode(text: string) -> @Result<Player, ValidationReport>               // JSON text
+Player.bind(pairs: Array<#(string, string)>) -> @Result<Player, ValidationReport>   // form pairs
+Player.encode(p: Player) -> @Result<Json, ValidationReport>
+Player.jsonSchema() -> string                                                  // draft 2020-12
+Fish.options() -> Array<string>                                                // an enum's variants
 ```
+
+and three a type calls on another — `__json`, `__schemaNode`, `__schemaDefs` —
+named with `__` because no application calls them. A field of another
+`#[validated]` type is read by `ThatType.parseAt`, written by `ThatType.__json`,
+described by `ThatType.__schemaNode`: members travel with the type (decision
+216), so the decorator never needs a second declaration. The private machinery
+the members call is the module `derived` (`derived.bp`), which the application
+imports only because the emitted members name it.
+
+`#[validated(transparent)]` (with `decorators.transparent` imported) on a type
+of one field writes and reads the type as that field — `Email(#[email] value:
+string)` is the text `"a@b.c"`, its violations at the field's own path, its
+JSON Schema the field's; on a type of any other number of fields it is refused.
 
 - **Fields it decodes:** `string`, `i32`, `i64`, `f64`, `bool`, `Json`, `?T`,
   `Array<T>` / `T[]`, `Set<T>` (a list; a repeated item is `duplicate` at its
   own index), `Dict<K, V>` (an object; `K` is `string`, `i32` — the key text
-  read by the integer grammar — or a `#[schema]` enum), a tuple `#(A, B, …)` (a
+  read by the integer grammar — or a `#[validated]` enum), a tuple `#(A, B, …)` (a
   list of exactly that length, each item at `at[i]`; a labelled tuple is
   refused), a union `A | B` (the arms in the type's order, the first that
   accepts; none → one `invalidUnion` whose `{arms}` names each arm's first
   violation; absent is `required` unless an arm is `?T` or `Json`), in any
-  nesting, and another `#[schema]` record or enum — the type itself included —
-  reached by calling `parse<ThatType>At` by name. Any other field type is a
-  located compile error naming the field and the type.
-- **Enums.** `#[schema]` on a payload-less enum decodes the variant's NAME
+  nesting, and another `#[validated]` record or enum — the type itself
+  included — reached by `ThatType.parseAt`. Any other field type is a located
+  compile error naming the field and the type.
+- **Enums.** `#[validated]` on a payload-less enum decodes the variant's NAME
   (`"Tuna"` → `Fish.Tuna`); absent is `required`, another kind `invalidType`,
-  another text `invalidValue` with `{options}`. It also emits
-  `optionsOf<TypeName>() -> Array<string>`, the variants in declaration order —
+  another text `invalidValue` with `{options}`. `Fish.options()` answers the
+  variants in declaration order —
   what `#[exhaustive]` on a `Dict<Key, V>` field reads (every variant a key, else
   `required` at `field.<Variant>`). With `#[tag("status")]` the enum is an
   object whose member `status` names the variant and whose other members are
-  the payload: a `#[schema]` record named `<Enum><Variant>` (`ReplySuccess`),
+  the payload: a `#[validated]` record named `<Enum><Variant>` (`ReplySuccess`),
   held as the variant's one field `value` (`Success(value: ReplySuccess)`).
   Not the variant's own name — a variant's constructor is a name of its module,
   so a record `Success` beside `Reply.Success` is constructed as the variant.
@@ -241,7 +252,7 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   `Violation.field` is a path (`path.bp`): `ship.zip`, `lines[1].sku`, `` for
   the document itself. A flat record's path is its field's name.
 - **Members are read with std's `Json` methods**: the emitted decoder reads
-  `input.field("name") ?? Json.Null`; `schemas.bp` walks `input.items()` and
+  `input.field("name") ?? Json.Null`; `derived.bp` walks `input.items()` and
   `input.members()` and keeps no reader of its own.
 - **Absent is one value.** A missing key and `null` decode the same: `null` for
   a `?T`, `required` for a `T`.
@@ -249,16 +260,16 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   range (`7.0` is whole, `1.5` and `2147483648` are `invalidType`); an `i64`
   field takes a whole number within ±(2^53 − 1).
 - **An undeclared key is refused** (`unrecognizedKey`; decision 144), at its own path, after the declared fields.
-- **Object policy** (front 125 step 5), each read by `#[schema]` and placed by
+- **Object policy** (front 125 step 5), each read by `#[validated]` and placed by
   its own marker: `#[stripUnknown]` on the type drops the undeclared members; a
   `#[rest]` field — one, typed `Dict<string, T>` — holds them, each decoded as
   `T` at its own key; `#[present]` on a `?T` field takes an absent key as
   `null` and refuses a key holding `null` (`invalidType`); `#[orElse(literal)]`
-  / `#[orElseOf("fn")]` give an absent key its default; `#[fallback(literal)]` /
-  `#[fallbackOf("fn")]` replace a value that does not decode or fails its
+  / `#[orElseOf(f)]` give an absent key its default; `#[fallback(literal)]` /
+  `#[fallbackOf(f)]` replace a value that does not decode or fails its
   checks, with no violation (the record is built, validated, rebuilt with the
   fallback of every such field, and validated again). A literal is a value of
-  the field's type — `string`, `i32`, `i64` (emitted as `schemas.widened(n.0)`),
+  the field's type — `string`, `i32`, `i64` (emitted as `derived.widened(n.0)`),
   `f64`, `bool`, an enum's variant by reference (`#[orElse(.Tuna)]` on a `Fish`
   field, emitted `Fish.Tuna` — decision 281, step 11), or their `?T` — or the
   marker is refused at the field; `#[orElseOf(f)]` / `#[fallbackOf(f)]` take the
@@ -269,27 +280,26 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   default beside `#[rest]` / `#[present]`.
 - **Coercion, transforms, the form binder** (step 6). `#[coerce]` on a
   `string`, `i32`, `i64`, `f64` or `bool` field (or its `?T`) reads text by the
-  type (`schemas.coerced`, decision 183): a number by std's numeral grammar, a
+  type (`derived.coerced`, decision 183): a number by std's numeral grammar, a
   `bool` by the stringbool set (`"false"` is `false`), a `string` from a number
   or a boolean; text the type does not read stays text and is `invalidType`,
   never a zero; `""` is absent. `#[coerce] #[isoDatetime]` (or
   `#[isoDatetimeOffset]`) on an `i64` reads an RFC 3339 instant as epoch
-  milliseconds — `#[validated]` then emits no check for that marker, the
-  decoder has read it. `#[stringbool]` on a `bool` takes only text of the set
+  milliseconds — no check is emitted for that marker, the decoder has read
+  it. `#[stringbool]` on a `bool` takes only text of the set
   (`true 1 yes on y enabled` / `false 0 no off n disabled`, case-insensitive).
   The transforms `#[trim]`, `#[lowercased]`, `#[uppercased]`,
   `#[normalized("NFC")]`, `#[normalizedUrl]` rewrite a text field in the order
-  written, after a default and before the checks. `bind<TypeName>(pairs)` reads
-  form pairs (`querystring.parse`, `encoding.formParse`) through
-  `schemas.formDocument` into the document `parse<TypeName>At` reads: every
+  written, after a default and before the checks. `T.bind(pairs)` reads form
+  pairs (`querystring.parse`, `encoding.formParse`) through
+  `derived.formDocument` into the document `T.parseAt` reads: every
   field by its type as `#[coerce]` would, a repeated name as an array's items
   (none is `[]`), a `bool` with no value `false`, a name the type does not
-  declare the unknown-key rule. A decoding marker on a `#[validated]` type that
-  is not `#[schema]` is refused — nothing would read it.
-- **Encoding and value markers** (step 8). `jsonOf<TypeName>(v)` writes a value
+  declare the unknown-key rule.
+- **Encoding and value markers** (step 8). `T.__json(v)` writes a value
   as the document its decoder reads (a member holding `null` left out, a
   `#[rest]` field's members merged in, an enum as its variant's name, a tagged
-  enum as its payload with the tag first); `encode<TypeName>(v)` runs the type's
+  enum as its payload with the tag first); `T.encode(v)` runs the type's
   own `validate()` first and is an `Error` for a value it refuses — the checks
   of a nested record are its own decoder's, not re-run by the outer encode.
   `#[preprocess(f)]` (`f: fn(input: Json) -> Json`) rewrites the field's raw
@@ -307,9 +317,10 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   its domain (`test/codecs_test.bp`); `millisToIso` writes UTC with milliseconds
   itself, because std's `clock.formatIso8601` answers local time without them
   on erlang.
-- **JSON Schema** (step 9, draft 2020-12). `jsonSchemaOf<TypeName>()` is the
-  document: `$schema` first, the type's node, `$defs` with every other
-  `#[schema]` type it reaches (`schemaDefsOf<…>` by name, so mutual recursion
+- **JSON Schema** (step 9, draft 2020-12). `T.jsonSchema()` is the
+  document: `$schema` first (and `$id`, the `#[schemaId("…")]`), the type's
+  node, `$defs` with every other `#[validated]` type it reaches
+  (`ThatType.__schemaDefs`, so mutual recursion
   is finite), a reference to the document's own type `{"$ref": "#"}`. A marker
   becomes its keyword as ZOD_DOCUMENTATION.md § 8.3 maps it (formats,
   `contentEncoding`, the regex formats' `pattern`, bounds as
@@ -322,63 +333,65 @@ pub fn optionsOf<TypeName>() -> Array<string>                                   
   format, a registered constraint, a date bound, `#[check]`, `#[preprocess]`)
   makes the field `{}`; under `#[jsonSchema]` on the type it is a compile error
   naming the field and the marker. `#[title]`, `#[describe]`, `#[example]`,
-  `#[deprecated]` on a type or a field are its annotations; `#[schemaId("…")]`
-  is `schemaIdOf<TypeName>()`. `spi.registerSchema(id, jsonSchemaOf<T>)` and
+  `#[deprecated]` on a type or a field are its annotations.
+  `spi.registerSchema(id, { -> T.jsonSchema() })` and
   `spi.registeredJsonSchemas()` (§ 8.4: `{"schemas": {id: …}}`, each with its
   `id`, a `$ref` by id); `table.toDraft07`, `table.toOpenApi30` and
   `table.withRefBase` rewrite a document for another dialect. The emitted code
   builds the document as `Json` at run time and writes it with
-  `schemas.jsonText` (a number by its digits when whole, the same on both
+  `derived.jsonText` (a number by its digits when whole, the same on both
   targets).
 - **Error views** (step 9): `report.flatten()` (`Flat(formErrors,
   fieldErrors)`, keyed by the first path segment), `report.tree()`
   (`ReportTree(errors, properties, items)`), `report.pretty()` (`✖ message` /
   `  → at path`). An `unrecognizedKey` is said at the object that holds the key,
   as Zod reports `unrecognized_keys`.
-- **The checks are `#[validated]`'s.** A type that carries constraint markers
-  is also `#[validated]`; the emitted decoder calls `validate<TypeName>` on the
-  record it built and re-roots the report under the record's path
-  (`schemas.under`). A marker on a `#[schema]` type that is not `#[validated]`
-  is a compile error.
+- **The checks run on what was decoded.** `T.parseAt` builds the record, calls
+  its `validate()` and re-roots the report under the record's path
+  (`derived.under`); `T.encode` calls `validate()` before it writes.
 - **Structural codes** (built-in templates in `messages.bp`): `invalidType`
   (`{expected}`, `{received}`), `required`, `unrecognizedKey` (`{key}`,
   `{type}`), `invalidJson` (`{reason}`), `invalidUnion` (`{arms}`),
   `invalidValue` (`{options}`), `duplicate`; `custom` is declared for the
   steps that follow.
 
-What the application has in scope — the emitted code names the library through
-ONE namespace, and the types its signatures spell are leaves:
+What the application has in scope — the emitted members name the library
+through ONE namespace, `derived`, and the types their signatures spell are
+leaves (a type cannot be named through a namespace); a field typed `Dict` or
+`Set` needs `collections.Dict` / `collections.Set` from std as well:
 
 ```bp
-import {decorators.schema} from "validation";
-import {schemas, schemas.Schema, report.ValidationReport, report.Violation} from "validation";
+import {decorators.validated} from "validation";
+import {derived, report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
 import {json.Json} from "std";
 ```
 
 Each part of a field's type below the field's own level (`Array<Array<i32>>`,
-`?Array<string>`, a `Dict`'s key and value) gets one emitted function,
-`__decode<Record>_<field>_<place>` (`0` the field, `0_1` its second part, …),
-because a library decoder cannot be passed as a value from emitted code (see
-*Language notes*); a tuple and a union get one for themselves, their
-straight-line decoder.
+`?Array<string>`, a `Dict`'s key and value, a field of another `#[validated]`
+type) gets one emitted function, `__decode<Record>_<field>_<place>` (`0` the
+field, `0_1` its second part, …), because neither a library decoder nor a
+type's member can be passed as a value from emitted code (see *Language
+notes*); a tuple and a union get one for themselves, their straight-line
+decoder. `decode` hands `derived.decodeText` the emitted `__parseAt<Type>`.
 
-`#[validated]` still emits bare names (`vNotBlank(…)`), so a type that carries
-both imports the predicates too. Decision 145 moves `#[validated]` to the
-namespaced form; that change edits rakun's import lines and lands with them.
+The checks emit bare predicate names (`vNotBlank(…)`), so a type with markers
+imports the predicates too. Decision 145 moves them to the namespaced form;
+that change edits rakun's import lines and lands with them.
 
 ## Consuming it
 
 `#[validated]` reads each field's type from `f.typeName`, the type as the source
-spells it: a list is `Array<…>` or `…[]`, a nullable field `?…`. It gives the
-type the members `validate(self) -> ValidationReport` (`req.validate()`) and
-`constraints() -> string` (`T.constraints()`) — `decl.addMember`, decision 216 —
-declared at the application site, so the application imports the names the members reference
-(decision 107 — the leaf is bound):
+spells it: a list is `Array<…>` or `…[]`, a nullable field `?…`. Its members —
+`validate(self) -> ValidationReport` (`req.validate()`), `constraints() ->
+string` (`T.constraints()`) and the parse half above — are declared at the
+application site (`decl.addMember`, decision 216), so the application imports
+the names the members reference (decision 107 — the leaf is bound):
 
 ```bp
 import {decorators.validated, decorators.notBlank, decorators.sizeBetween} from "validation";
-import {report.ValidationReport, report.Violation} from "validation";
+import {derived, report.ValidationReport, report.Violation} from "validation";
 import {constraints.vNotBlank, constraints.vSizeBetween, table.constraintTableJson} from "validation";
+import {json.Json} from "std";
 ```
 
 Measured before bundling with a scratch consumer declaring the library as a
@@ -418,15 +431,15 @@ library writes instead.
 
 **Holds on both targets** (`platform_test.bp`):
 
-- A generic record carries a function field and a generic method
-  (`Schema<T>`); a record field of fn type is called through a local
-  (`val f = self.run; f(x)`).
+- A generic record carries a function field and a generic method; a record
+  field of fn type is called through a local (`val f = self.run; f(x)`).
 - A union is a generic argument (`Holder<i32 | string>`) and `x is T` tells its
   arms apart at run time.
 - A decorator body calls a bodied function of its own module, recursion
   included, and a decorator parameter's default is applied (`#[maker]` for
-  `maker(decl, suffix: string = "X")`). The per-marker rules of `#[validated]`
-  are written out inline for historical reasons, not because they must be.
+  `maker(decl, suffix: string = "X")`) — a run-time parameter; a comptime one
+  takes no default (below). The per-marker rules of `#[validated]` are written
+  out inline for historical reasons, not because they must be.
 - Emitted code names a module through its namespace (`constraints.vNotBlank(…)`).
 - `json.decode` keeps member order, refuses a duplicate member and refuses
   `NaN`; a JSON number is an `f64`.
@@ -457,17 +470,38 @@ library writes instead.
   payload record is named `<Enum><Variant>` (`ReplySuccess`).
 - A function named like a primitive type (`pub fn string()`) shadows the type
   in every annotation of its module; the mismatch is reported far from the
-  cause ("expected string, got function"). Hence `schemas.text()`.
+  cause ("expected string, got function").
 - A type cannot be named through a namespace (`report.ValidationReport` in an
   annotation is "unknown type"); the emitted signatures need the type imported
   as a leaf.
 - A namespace member is resolved where it is called, not where it is passed:
-  `schemas.of(schemas.decodeString)` is "unbound variable 'schemas'".
+  `derived.optionalOf(x, at, derived.decodeString)` is "unbound variable
+  'derived'".
 - In a module of THIS package — the tests — a namespace bound by the bare
-  `import {schemas};` is not resolved inside a lambda of emitted code
-  (`schemas is not defined` on node, `decodeString/3 undefined` on erlang). A
-  consumer's `from "validation"` namespace is. `#[schema]` emits named
+  `import {derived};` is not resolved inside a lambda of emitted code
+  (`derived is not defined` on node, `decodeString/3 undefined` on erlang). A
+  consumer's `from "validation"` namespace is. The emitted code uses named
   functions instead of lambdas, which works in both.
+- A type's static member is not a value on erlang (`Address.parseAt` as an
+  argument is "variable 'Address' is unbound"); the emitted function that calls
+  it is passed instead.
+- A record spread inside a member a decorator adds (`T(..v, f: x)`) is emitted
+  `new T(v, x)` on commonJS; the fallback rebuild names every field.
+- A comptime decorator parameter takes no default, and a run-time one whose
+  default is an enum value names "a binding the decorator body cannot read":
+  `#[validated]`'s `form` is a run-time `?Form = null`, the lexeme read from
+  `decl.annotations`.
+- `Decorator` (decision 268) is an unknown type in a package's module, and a
+  decorator's name is assignable to no other parameter type: `#[each("email")]`
+  names its marker as text.
+- A decorator body whose lambda holds many locals overflows the comptime stack
+  (`wasm3: [trap] stack overflow`): the per-field work of the parse half is in
+  helpers (`fieldNode`) taking plain data.
+- Under `botopink test --target erlang`, two test modules declaring a type of
+  one name share its module (a member of one is reached from the other):
+  `schema_test.bp`'s types are named apart from the examples'.
+- std's `clock.formatIso8601` answers local time without milliseconds on erlang
+  and UTC with them on node; `codecs.millisToIso` writes the text itself.
 - A method called on a lambda parameter whose type arrives through a generic
   (`box.map({ s -> s.length() })`) is emitted verbatim on commonJS
   (`s.length is not a function`). Pass a named function.
@@ -476,8 +510,8 @@ library writes instead.
   erlang. `vSizeBetween` inherits it for text outside the BMP. The portable
   count is `unicode.codepoints(s).length`, which the length markers of the next
   step are written against.
-- There is no `f64` → integer conversion in `std/math` (hence `schemas.bp`'s
-  three conversion cells).
+- There is no `f64` → integer conversion in `std/math` (hence `derived.bp`'s
+  conversion cells).
 - A helper cannot take a `@Decl` (the call lowers to a run-time module that
   does not exist): every marker body calls `decl.fail` itself. Inside a
   decorator body an optional has no `unwrapOr` (`xs.slice(0, 1).join("")`
@@ -486,7 +520,7 @@ library writes instead.
 - An `i64` beyond ±(2^53 − 1) cannot be built on commonJS (the arithmetic is
   refused as an overflow), so `#[safeInt]`'s refusal is reached on erlang only.
 - An integer literal does not widen to `i64` in arithmetic; `wholeI64`
-  (`schemas.bp`) is the host cell that produces one. `bindEpochMillis` reads its
+  (`derived.bp`) is the host cell that produces one. `bindEpochMillis` reads its
   `i64` with std's `String.parseInt` over the trimmed text (front 97), so a
   numeral past the `i64` range is a `typeMismatch` on every target (decision 319).
 

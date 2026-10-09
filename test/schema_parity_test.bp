@@ -1,7 +1,7 @@
 //// validation — the decoder's boundary test.
 ////
 //// `parity_test.bp` holds `validate<TypeName>` to one digest on both targets;
-//// this file does the same for `parse<TypeName>`. Twenty documents run through
+//// this file does the same for `T.parse`. Twenty documents run through
 //// ONE emitted decoder on erlang and on commonJS and are compared against ONE
 //// expected digest, so a target that read a document differently reds here
 //// rather than passing its own half of a pair.
@@ -13,19 +13,17 @@
 //// the built-in templates and the checks `#[validated]` runs afterwards, in one
 //// string.
 
-import {decorators.schema, decorators.validated, decorators.notBlank, decorators.minValue};
+import {decorators.validated, decorators.notBlank, decorators.minValue};
 import {constraints.vNotBlank, constraints.vMinValueI32};
 import {table.constraintTableJson};
-import {schemas};
-import {schemas.Schema};
+import {derived};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 import {json.Json} from "std";
 
-#[schema]
+#[validated]
 pub type Tag(label: string, weight: f64)
 
-#[schema]
 #[validated]
 pub type Entry(
     #[notBlank] title: string,
@@ -91,7 +89,7 @@ fn digest() -> string {
     var i = 0;
     val all = documents();
     while (i < all.length) {
-        out.push(digestOne(i, decodeEntry(all.at(i) ?? "")));
+        out.push(digestOne(i, Entry.decode(all.at(i) ?? "")));
         i = i + 1;
     }
     return out.join(";\n");

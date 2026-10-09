@@ -1,12 +1,12 @@
 // The suite case of the front's example, byte for byte but for the import
-// lines: a module of this package names it by path (`import {schemas};`,
+// lines: a module of this package names it by path (`import {derived};`,
 // decision 206), an application by `from "validation"`.
 //
 // Front 125 — validation: Zod's feature set · examples/coercion-and-forms-example.bp
 //
 // Demonstrates: step 6 — coercion, transforms, and the form binder. A form and
-// a query string carry text only; `bind<T>` decodes them into the same record
-// `parse<T>` builds from JSON, with the same report.
+// a query string carry text only; `T.bind` decodes them into the same record
+// `T.parse` builds from JSON, with the same report.
 //
 //   z.coerce.number()          -> #[coerce] on i32 / i64 / f64
 //   z.coerce.boolean()         -> #[coerce] on bool — but NOT `Boolean(value)`:
@@ -25,13 +25,12 @@
 //
 // Target: both.
 
-import {decorators.schema, decorators.validated, decorators.coerce, decorators.stringbool, decorators.trim, decorators.lowercased, decorators.email, decorators.isoDatetime, decorators.minValue};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation};
+import {decorators.validated, decorators.coerce, decorators.stringbool, decorators.trim, decorators.lowercased, decorators.email, decorators.isoDatetime, decorators.minValue};
+import {derived};
+import {report.ValidationReport, report.Violation};
 import {constraints.vEmail, constraints.vMinValueI32, table.constraintTableJson};
 import {querystring, json.Json} from "std";
 
-#[schema]
 #[validated]
 pub type Newsletter(
     #[trim] #[lowercased] #[email] email: string,
@@ -42,7 +41,7 @@ pub type Newsletter(
 )
 
 // The same fields, nothing coerced: a JSON string is not a number.
-#[schema]
+#[validated]
 pub type StrictAge(age: i32)
 
 fn located(r: @Result<Newsletter, ValidationReport>) -> string {
@@ -56,7 +55,7 @@ fn located(r: @Result<Newsletter, ValidationReport>) -> string {
 
 fn submitted(body: string) -> @Result<Newsletter, ValidationReport> {
     val pairs = try querystring.parseForm(body) catch [];
-    return bindNewsletter(pairs);
+    return Newsletter.bind(pairs);
 }
 
 test "validation: a form body becomes the typed record" {
@@ -105,7 +104,7 @@ test "validation: a coerced field still runs its checks" {
 }
 
 test "validation: the same record decodes from JSON, where coercion also applies" {
-    val n = try decodeNewsletter(
+    val n = try Newsletter.decode(
         """{"email": " Ana@Example.com ", "age": "30", "terms": "yes",
             "startsAt": "2020-01-01T06:15:00Z", "tags": []}""",
     );
@@ -114,7 +113,7 @@ test "validation: the same record decodes from JSON, where coercion also applies
 }
 
 test "validation: without #[coerce], a JSON string is not a number" {
-    val strict = decodeStrictAge("""{"age": "30"}""");
+    val strict = StrictAge.decode("""{"age": "30"}""");
     val codes = case strict {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -122,7 +121,7 @@ test "validation: without #[coerce], a JSON string is not a number" {
             .join(",");
     };
     assert codes == "age:invalidType";
-    val n = try decodeNewsletter(
+    val n = try Newsletter.decode(
         """{"email": "a@b.c", "age": 30, "terms": "no", "startsAt": "2020-01-01T06:15:00Z", "tags": []}""",
     );
     assert n.age == 30;

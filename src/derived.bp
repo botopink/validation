@@ -1,15 +1,12 @@
-//// validation — from untrusted data to a typed value.
+//// validation — what the members `#[validated]` gives a type call: the
+//// decoders from a `Json` document to a typed value, the encoders back, the form
+//// binder's document, and the JSON Schema writer (decisions 306, 327).
 ////
-//// `validate<TypeName>` checks a value that is ALREADY a record. This module is
-//// the step before it: a `Json` document in, a typed value or a report out.
-////
-////     pub type Schema<T>(run: fn(input: Json, at: string) -> @Result<T, ValidationReport>)
-////
-//// A schema is a decoder and nothing else: a function from a document and the
-//// path it sits at to a value or the violations that say why not. The
-//// primitives below are the decoders of the language's own types; `#[schema]`
-//// (`decorators.bp`) emits one for a record out of them, by name; `optionalOf`
-//// and `decodeArrayOf` compose them.
+//// `validate()` checks a value that is ALREADY a record. The decoders are the
+//// step before it: a `Json` document in, a typed value or a report out. The type
+//// is the only schema (306): no schema value is public, and this module is the
+//// machinery an application imports only because the emitted members name it
+//// (`import {derived} from "validation";`).
 ////
 //// EVERY VIOLATION, NOT THE FIRST. A decoder of several parts — a list, a
 //// record — decodes every part and reports every part's violations, each at its
@@ -29,103 +26,10 @@
 //// `language-gaps.md`), and a lambda only ever CALLS a decoder.
 
 import {report.Violation, report.ValidationReport, report.violation};
-import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate, messages.MessageSource, messages.useParseSource, messages.clearParseSource};
+import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate};
 import {path.key, path.index};
 import {formats.isIsoDatetime, formats.isIsoDatetimeOffset};
 import {json, json.Json, collections.Dict, collections.Set, io.clock, unicode, unicode.NormalizationForm, url} from "std";
-
-pub type Schema<T>(
-    run: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) {
-    // Zod's `.parse` and `.safeParse` at once: the `@Result` is the safe form,
-    // and `try` in a fallible function is the throwing one.
-    pub fn parse(self: Self<T>, input: Json) -> @Result<T, ValidationReport> {
-        val decoder = self.run;
-        return try decoder(input, "");
-    }
-
-    // The same, for a value that sits inside a larger document.
-    pub fn parseAt(
-        self: Self<T>,
-        input: Json,
-        at: string,
-    ) -> @Result<T, ValidationReport> {
-        val decoder = self.run;
-        return try decoder(input, at);
-    }
-
-    // JSON text in. Text that is not a JSON document is ONE violation at the
-    // root, coded `invalidJson`, with the reader's own reason.
-    pub fn decode(self: Self<T>, text: string) -> @Result<T, ValidationReport> {
-        return try decodeText(text, self.run);
-    }
-
-    // `.parse(x, { error })`: the same, its messages from `source` first and
-    // the installed source after (`messages.useParseSource`); a field's own
-    // `#[message]` / `#[typeMessage]` still wins.
-    pub fn parseWith(
-        self: Self<T>,
-        input: Json,
-        source: MessageSource,
-    ) -> @Result<T, ValidationReport> {
-        val decoder = self.run;
-        val _in = useParseSource(source);
-        val r = decoder(input, "");
-        val _out = clearParseSource();
-        return try r;
-    }
-
-    // Whether the document decodes — for a caller that wants the answer and
-    // not the report.
-    pub fn accepts(self: Self<T>, input: Json) -> bool {
-        val decoder = self.run;
-        return violationsOf(decoder(input, "")).length == 0;
-    }
-
-    pub fn optional(self: Self<T>) -> Schema<?T> {
-        val decoder = self.run;
-        return Schema(run: { input, at -> optionalOf(input, at, decoder) });
-    }
-
-    pub fn array(self: Self<T>) -> Schema<Array<T>> {
-        val decoder = self.run;
-        return Schema(run: { input, at -> decodeArrayOf(input, at, decoder) });
-    }
-}
-
-// A schema from a decoder — what `schemaOf<TypeName>()` answers.
-pub fn of<T>(
-    run: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> Schema<T> {
-    return Schema(run: run);
-}
-
-// Named `text`, not `string`: a function called `string` shadows the primitive
-// type in every annotation of its module (`at: string` then reads as "the
-// function"), and the checker reports the mismatch far from the cause.
-pub fn text() -> Schema<string> {
-    return Schema(run: { input, at -> decodeString(input, at) });
-}
-
-pub fn int() -> Schema<i32> {
-    return Schema(run: { input, at -> decodeInt(input, at) });
-}
-
-pub fn long() -> Schema<i64> {
-    return Schema(run: { input, at -> decodeLong(input, at) });
-}
-
-pub fn float() -> Schema<f64> {
-    return Schema(run: { input, at -> decodeFloat(input, at) });
-}
-
-pub fn boolean() -> Schema<bool> {
-    return Schema(run: { input, at -> decodeBool(input, at) });
-}
-
-pub fn anyJson() -> Schema<Json> {
-    return Schema(run: { input, at -> decodeJson(input, at) });
-}
 
 // ── reading a document ──────────────────────────────────────────────────────
 
@@ -225,8 +129,8 @@ pub fn violationsOf<T>(r: @Result<T, ValidationReport>) -> Array<Violation> {
     };
 }
 
-// A report whose violations sit under `at` — what `parse<TypeName>` does with
-// the report `validate<TypeName>` answers for a record that is itself a member
+// A report whose violations sit under `at` — what `T.parseAt` does with
+// the report `validate()` answers for a record that is itself a member
 // of a larger document: `street` becomes `address.street`.
 pub fn under(at: string, report: ValidationReport) -> ValidationReport {
     if (at == "") return report;
@@ -235,6 +139,34 @@ pub fn under(at: string, report: ValidationReport) -> ValidationReport {
             violation(nested(at, v.field), v.code, v.message, v.invalidValue);
         }),
     );
+}
+
+// The report of a transparent type (`#[validated(transparent)]`), whose one
+// field IS the value at `at`: `value` becomes `at`, `value[1]` `at[1]`.
+pub fn underField(
+    at: string,
+    name: string,
+    report: ValidationReport,
+) -> ValidationReport {
+    return ValidationReport(
+        violations: report.violations.map({ v ->
+            violation(
+                nested(at, fieldRest(v.field, name)),
+                v.code,
+                v.message,
+                v.invalidValue,
+            );
+        }),
+    );
+}
+
+fn fieldRest(field: string, name: string) -> string {
+    if (field == name) return "";
+    if (field.startsWith(name + "."))
+        return field.slice(name.length() + 1, field.length());
+    if (field.startsWith(name + "["))
+        return field.slice(name.length(), field.length());
+    return field;
 }
 
 fn nested(at: string, field: string) -> string {
@@ -863,7 +795,7 @@ pub fn typeRestated<T>(
 
 // ── step 8: encoding ────────────────────────────────────────────────────────
 //
-// `encode<TypeName>` / `jsonOf<TypeName>` (`#[schema]`) write a value as the
+// `T.encode` / `T.__json` (`#[validated]`) write a value as the
 // document its decoder reads: a number as a JSON number, a list as an array, a
 // set as an array in its order, a dict as an object, a tuple as an array, a
 // union as its arm, an enum as its variant's name. A member whose value is
@@ -970,11 +902,12 @@ fn retagged(m: #(string, Json), tag: string, tagNode: Json) -> #(string, Json) {
     return m;
 }
 
-// The document of the type `name`: its node with `$schema` first and `$defs`
-// last — every type it reaches but itself — and every `$ref` to itself written
+// The document of the type `name`: its node with `$schema` first (and `$id`,
+// the `#[schemaId]` when the type carries one) and `$defs` last — every type it reaches but itself — and every `$ref` to itself written
 // `#`, the document's root (ZOD_DOCUMENTATION.md § 8.2, `cycles`).
 pub fn documentOf(
     name: string,
+    id: string,
     node: Json,
     defs: Array<#(string, Json)>,
 ) -> string {
@@ -984,9 +917,14 @@ pub fn documentOf(
         .map({ d ->
             #(d[0], refsRenamed(d[1], own, "#"));
         });
-    val head: Array<#(string, Json)> = [
+    val schemaMember: Array<#(string, Json)> = [
         #("$schema", Json.Str("https://json-schema.org/draft/2020-12/schema")),
     ];
+    val idMember: Array<#(string, Json)> = if (id == "")
+        []
+    else
+        [#("$id", Json.Str(id))];
+    val head = schemaMember.append(idMember);
     val body = refsRenamed(node, own, "#").members();
     val tail: Array<#(string, Json)> = if (others.length > 0)
         [#("$defs", Json.Obj(others))]

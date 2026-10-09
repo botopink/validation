@@ -86,21 +86,21 @@ fn refusedWith(out: string, text: string, at: string) -> bool {
         && out.indexOf(["--> src/main.bp:", at].join("")) >= 0;
 }
 
-val SCHEMA_IMPORTS = """import {decorators.schema} from "validation";
-import {schemas, schemas.Schema, report.ValidationReport, report.Violation} from "validation";
+val SCHEMA_IMPORTS = """import {decorators.validated} from "validation";
+import {derived, report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
 import {json.Json} from "std";
 """;
 
-// ── `#[schema]` ─────────────────────────────────────────────────────────────
+// ── the parse half of `#[validated]` ────────────────────────────────────────
 
-test "validation: a field type #[schema] does not decode is refused, naming field and type" {
+test "validation: a field type #[validated] does not decode is refused, naming field and type" {
     val out = checked(
         "schema_unsupported_field",
         [
             SCHEMA_IMPORTS,
             """import {collections.Queue} from "std";
 
-#[schema]
+#[validated]
 pub type Bad(
     name: string,
     scores: Queue<i32>,
@@ -110,7 +110,7 @@ pub type Bad(
     );
     assert refusedWith(
         out,
-        "#[schema] on `Bad`: field `scores` is `Queue<i32>`, which this decorator does not decode",
+        "#[validated] on `Bad`: field `scores` is `Queue<i32>`, which this decorator does not decode",
         "6:3",
     );
 }
@@ -121,7 +121,7 @@ test "validation: the same project with a decoded field type compiles" {
         [
             SCHEMA_IMPORTS,
             """
-#[schema]
+#[validated]
 pub type Good(
     name: string,
     scores: Array<i32>,
@@ -132,7 +132,7 @@ pub type Good(
     assert out.startsWith("0\n");
 }
 
-test "validation: #[exhaustive] on a dict whose key is not a #[schema] enum is refused" {
+test "validation: #[exhaustive] on a dict whose key is not a #[validated] enum is refused" {
     val out = checked(
         "schema_exhaustive_text_key",
         [
@@ -140,7 +140,7 @@ test "validation: #[exhaustive] on a dict whose key is not a #[schema] enum is r
             """import {decorators.exhaustive} from "validation";
 import {collections.Dict} from "std";
 
-#[schema]
+#[validated]
 pub type Bad(
     #[exhaustive] labels: Dict<string, string>,
 )
@@ -149,7 +149,7 @@ pub type Bad(
     );
     assert refusedWith(
         out,
-        "#[exhaustive] on field `labels` of `Bad`: it applies to `Dict<K, V>` whose key `K` is a #[schema] enum",
+        "#[exhaustive] on field `labels` of `Bad`: it applies to `Dict<K, V>` whose key `K` is a #[validated] enum",
         "7:3",
     );
 }
@@ -161,7 +161,7 @@ test "validation: #[tag] on a record is refused" {
             SCHEMA_IMPORTS,
             """import {decorators.tag} from "validation";
 
-#[schema]
+#[validated]
 #[tag("kind")]
 pub type Bad(name: string)
 """,
@@ -187,7 +187,7 @@ test "validation: #[orElse] with a literal that is not the field's type is refus
             SCHEMA_IMPORTS,
             POLICY_IMPORTS,
             """
-#[schema]
+#[validated]
 pub type Bad(
     #[orElse(7)] food: string,
 )
@@ -208,7 +208,7 @@ test "validation: #[present] on a field that is not optional is refused" {
             SCHEMA_IMPORTS,
             POLICY_IMPORTS,
             """
-#[schema]
+#[validated]
 pub type Bad(
     #[present] middle: string,
 )
@@ -217,7 +217,7 @@ pub type Bad(
     );
     assert refusedWith(
         out,
-        "#[schema] on field `middle` of `Bad`: #[present] says the key may be left out, so the field is `?T`, and this one is `string`",
+        "#[validated] on field `middle` of `Bad`: #[present] says the key may be left out, so the field is `?T`, and this one is `string`",
         "7:3",
     );
 }
@@ -229,7 +229,7 @@ test "validation: #[rest] on a field that is not Dict<string, T> is refused, and
             SCHEMA_IMPORTS,
             POLICY_IMPORTS,
             """
-#[schema]
+#[validated]
 pub type Bad(
     #[rest] extra: Array<string>,
 )
@@ -247,7 +247,7 @@ pub type Bad(
             SCHEMA_IMPORTS,
             POLICY_IMPORTS,
             """
-#[schema]
+#[validated]
 #[stripUnknown]
 pub type Bad(
     #[rest] a: Dict<string, i32>,
@@ -271,7 +271,7 @@ test "validation: #[coerce] on a type it cannot read from text, and a transform 
             SCHEMA_IMPORTS,
             """import {decorators.coerce, decorators.trim} from "validation";
 
-#[schema]
+#[validated]
 pub type Bad(
     #[coerce] ids: Array<i32>,
 )
@@ -280,7 +280,7 @@ pub type Bad(
     );
     assert refusedWith(
         coerced,
-        "#[schema] on field `ids` of `Bad`: #[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `Array<i32>`",
+        "#[validated] on field `ids` of `Bad`: #[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `Array<i32>`",
         "6:3",
     );
     val trimmed = checked(
@@ -289,7 +289,7 @@ pub type Bad(
             SCHEMA_IMPORTS,
             """import {decorators.coerce, decorators.trim} from "validation";
 
-#[schema]
+#[validated]
 pub type Bad(
     #[trim] n: i32,
 )
@@ -298,27 +298,8 @@ pub type Bad(
     );
     assert refusedWith(
         trimmed,
-        "#[schema] on field `n` of `Bad`: a transform rewrites text, and this field is `i32`",
+        "#[validated] on field `n` of `Bad`: a transform rewrites text, and this field is `i32`",
         "6:3",
-    );
-}
-
-test "validation: a decoding marker on a #[validated] type that is not #[schema] is refused" {
-    val out = checked(
-        "validated_coerce_without_schema",
-        """import {decorators.validated, decorators.coerce} from "validation";
-import {report.ValidationReport, report.Violation, table.constraintTableJson} from "validation";
-
-#[validated]
-pub type Bad(
-    #[coerce] age: i32,
-)
-""",
-    );
-    assert refusedWith(
-        out,
-        "#[coerce] on field `age` of `Bad`: it says how a document is decoded, and `Bad` is not #[schema] - nothing would read it",
-        "4:3",
     );
 }
 
@@ -406,7 +387,6 @@ test "validation: under #[jsonSchema] a marker with no keyword is refused, namin
             """import {decorators.validated, decorators.jsonSchema, decorators.creditCard} from "validation";
 import {constraints.vCreditCard, table.constraintTableJson} from "validation";
 
-#[schema]
 #[validated]
 #[jsonSchema]
 pub type Bad(
@@ -419,6 +399,27 @@ pub type Bad(
         out,
         "#[jsonSchema] on `Bad`: field `card`: #[creditCard] has no JSON Schema keyword - remove #[jsonSchema] or the marker",
         "7:3",
+    );
+}
+
+// ── step 12: a transparent type ─────────────────────────────────────────────
+
+test "validation: #[validated(transparent)] on a type of two fields is refused" {
+    val out = checked(
+        "validated_transparent_two_fields",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.transparent} from "validation";
+
+#[validated(transparent)]
+pub type Bad(a: string, b: string)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[validated(transparent)] on `Bad`: a transparent type is written as its one field, and this type has 2",
+        "6:3",
     );
 }
 
@@ -511,7 +512,7 @@ fn rowModule(row: #(string, string, string)) -> string {
     return [
         "import {decorators.validated, decorators.",
         row._0,
-        "} from \"validation\";\nimport {report.ValidationReport, report.Violation, table.constraintTableJson} from \"validation\";\n\n#[validated]\npub type Bad(#[",
+        "} from \"validation\";\nimport {derived, report.ValidationReport, report.Violation, table.constraintTableJson} from \"validation\";\nimport {json.Json} from \"std\";\n\n#[validated]\npub type Bad(#[",
         row._0,
         row._1,
         "] x: ",
@@ -581,7 +582,7 @@ test "validation: every marker on a field type it cannot check is a located comp
     while (i < rows.length) {
         val r = rows.at(i) ?? #("", "", "");
         val text = ["#[", r._0, "] on field `x` of `Bad`: "].join("");
-        val at = ["--> src/m_", [i].join(""), ".bp:4:3"].join("");
+        val at = ["--> src/m_", [i].join(""), ".bp:5:3"].join("");
         if (out.indexOf(text) < 0 || out.indexOf(at) < 0)
             missing = missing.append([r._0]);
         i = i + 1;

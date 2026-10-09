@@ -6,9 +6,8 @@
 import {messages.MessageSource, messages.setMessageSource, messages.builtInOnly, messages.templateFor, messages.builtInTemplate};
 import {messages.useParseSource, messages.clearParseSource};
 import {report.Violation, report.ValidationReport};
-import {decorators.schema, decorators.validated, decorators.minLength, decorators.message, decorators.typeMessage};
-import {schemas};
-import {schemas.Schema};
+import {decorators.validated, decorators.minLength, decorators.message, decorators.typeMessage};
+import {derived};
 import {constraints.vMinLength, table.constraintTableJson};
 import {json, json.Json} from "std";
 
@@ -57,7 +56,7 @@ test "validation: the six levels of a message resolve in order" {
             ],
         ),
     );
-    val typed = parseLevels(doc);
+    val typed = Levels.parse(doc);
     val _g = clearParseSource();
     assert levelMessages(typed) == "name: the type's own";
     val short = try json.decode(
@@ -66,13 +65,12 @@ test "validation: the six levels of a message resolve in order" {
     val _h = useParseSource(
         tableSource("", [#("minLength", "per-parse length")]),
     );
-    val checked = parseLevels(short);
+    val checked = Levels.parse(short);
     val _i = clearParseSource();
     assert levelMessages(checked) == "code: the check's own";
     val _z = setMessageSource(builtInOnly());
 }
 
-#[schema]
 #[validated]
 pub type Levels(
     #[typeMessage("the type's own")] name: string,
@@ -80,7 +78,7 @@ pub type Levels(
 )
 
 fn levelMessages(r: @Result<Levels, ValidationReport>) -> string {
-    return schemas
+    return derived
         .violationsOf(r)
         .map({ v -> v.field + ": " + v.message })
         .join(" | ");

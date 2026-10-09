@@ -24,9 +24,11 @@ import {constraints.vNotBlank, constraints.vNotEmpty, constraints.vSizeBetween, 
 import {spi.vConstraint};
 import {constraints.vMinLength, constraints.vMaxLength, constraints.vLength, constraints.vStartsWith, constraints.vEndsWith, constraints.vIncludes, constraints.vUppercase, constraints.vLowercase, constraints.vEmailHtml5, constraints.vEmailRfc5322, constraints.vEmailUnicode, constraints.vUuid, constraints.vUuidV, constraints.vGuid, constraints.vUrl, constraints.vUrlHost, constraints.vUrlProtocol, constraints.vHttpUrl, constraints.vHostname, constraints.vE164, constraints.vEmoji, constraints.vBase64, constraints.vBase64Url, constraints.vHex, constraints.vJwt, constraints.vJwtAlg, constraints.vNanoid, constraints.vCuid, constraints.vCuid2, constraints.vUlid, constraints.vIpv4, constraints.vIpv6, constraints.vMac, constraints.vMacDelimiter, constraints.vCidrv4, constraints.vCidrv6, constraints.vCreditCard, constraints.vCurrencyCode, constraints.vIban, constraints.vHash, constraints.vHashEnc, constraints.vIsoDate, constraints.vIsoTime, constraints.vIsoTimePrecision, constraints.vIsoDatetime, constraints.vIsoDatetimeOffset, constraints.vIsoDatetimeLocal, constraints.vIsoDatetimePrecision, constraints.vIsoDuration, constraints.vGtI32, constraints.vGtF64, constraints.vLtI32, constraints.vLtF64, constraints.vNegativeI32, constraints.vNegativeF64, constraints.vNegativeOrZeroI32, constraints.vMultipleOfI32, constraints.vMultipleOfF64, constraints.vSafeInt, constraints.vFloat32, constraints.vAfterIso, constraints.vBeforeIso};
 import {messages.setMessageSource, messages.builtInOnly};
+import {derived};
+import {json.Json} from "std";
 
 #[validated]
-pub type CreateUserRequest(
+pub type ParityUserRequest(
     #[notBlank] #[sizeBetween(2, 50)] name: string,
     #[notBlank] #[email] email: string,
     #[minValue(18)] #[maxValue(120)] age: i32,
@@ -38,8 +40,8 @@ fn input(
     mail: string,
     age: i32,
     postal: string,
-) -> CreateUserRequest {
-    return CreateUserRequest(
+) -> ParityUserRequest {
+    return ParityUserRequest(
         name: name,
         email: mail,
         age: age,
@@ -49,7 +51,7 @@ fn input(
 
 // The twenty inputs. Ten are valid in at least one field that another input
 // breaks, so every predicate is exercised on both sides of its boundary.
-fn inputs() -> Array<CreateUserRequest> {
+fn inputs() -> Array<ParityUserRequest> {
     return [
         input("Ana", "ana@example.com", 30, "01310-100"),
         input("", "ana@example.com", 30, "01310-100"),
@@ -136,8 +138,8 @@ test "validation: twenty inputs, one function, one answer on both rows" {
 }
 
 test "validation: the table crosses byte-identically too" {
-    assert CreateUserRequest.constraints()
-        == "{\"type\":\"CreateUserRequest\",\"fields\":[{\"name\":\"name\",\"constraints\":[{\"code\":\"notBlank\"},{\"code\":\"sizeBetween\",\"min\":2,\"max\":50}]},{\"name\":\"email\",\"constraints\":[{\"code\":\"notBlank\"},{\"code\":\"email\"}]},{\"name\":\"age\",\"constraints\":[{\"code\":\"minValue\",\"min\":18},{\"code\":\"maxValue\",\"max\":120}]},{\"name\":\"postalCode\",\"constraints\":[{\"code\":\"pattern\",\"regex\":\"^[0-9]{5}-[0-9]{3}$\"}]}]}";
+    assert ParityUserRequest.constraints()
+        == "{\"type\":\"ParityUserRequest\",\"fields\":[{\"name\":\"name\",\"constraints\":[{\"code\":\"notBlank\"},{\"code\":\"sizeBetween\",\"min\":2,\"max\":50}]},{\"name\":\"email\",\"constraints\":[{\"code\":\"notBlank\"},{\"code\":\"email\"}]},{\"name\":\"age\",\"constraints\":[{\"code\":\"minValue\",\"min\":18},{\"code\":\"maxValue\",\"max\":120}]},{\"name\":\"postalCode\",\"constraints\":[{\"code\":\"pattern\",\"regex\":\"^[0-9]{5}-[0-9]{3}$\"}]}]}";
 }
 
 test "validation: the digest is not vacuous" {

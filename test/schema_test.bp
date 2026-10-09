@@ -1,4 +1,4 @@
-//// validation — `#[schema]`: from a document to a record.
+//// validation — the parse half of `#[validated]`: from a document to a record.
 ////
 //// The cases are the ones a decoder is easy to get wrong in silence: every
 //// wrong field reported and not the first, the path of a value inside a list
@@ -9,52 +9,57 @@
 //// this one file. A decoder that answered differently on one of them would red
 //// its own half here; `parity_test.bp` holds the two to one digest besides.
 
-import {decorators.schema, decorators.validated, decorators.notBlank, decorators.minValue, decorators.maxValue};
+import {decorators.validated, decorators.notBlank, decorators.minValue, decorators.maxValue};
+import {decorators.email, decorators.transparent, constraints.vEmail};
 import {decorators.orElse, decorators.orElseOf, decorators.fallback, decorators.fallbackOf, decorators.present, decorators.rest};
 import {constraints.vNotBlank, constraints.vMinValueI32, constraints.vMaxValueI32};
 import {table.constraintTableJson};
-import {schemas};
-import {schemas.Schema};
+import {derived};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 import {json, json.Json, collections.Set, collections.Dict, querystring} from "std";
 
-#[schema]
-pub type Signup(
+// The types here are named apart from the examples' (`SignupDoc`, not
+// `Signup`).
+// LANGUAGE GAP: under `botopink test --target erlang`, two test modules that
+// declare a type of one name share its module, so a member of one is reached
+// from the other.
+#[validated]
+pub type SignupDoc(
     username: string,
     xp: i32,
     bio: ?string,
 )
 
-#[schema]
-pub type Address(
+#[validated]
+pub type AddressDoc(
     street: string,
     zip: string,
 )
 
-#[schema]
-pub type Line(
+#[validated]
+pub type LineDoc(
     sku: string,
     quantity: i32,
 )
 
-#[schema]
-pub type Order(
+#[validated]
+pub type OrderDoc(
     id: string,
-    ship: Address,
-    billing: ?Address,
-    lines: Array<Line>,
+    ship: AddressDoc,
+    billing: ?AddressDoc,
+    lines: Array<LineDoc>,
     tags: string[],
     note: ?string,
 )
 
-#[schema]
-pub type Category(
+#[validated]
+pub type CategoryDoc(
     name: string,
-    subcategories: Array<Category>,
+    subcategories: Array<CategoryDoc>,
 )
 
-#[schema]
+#[validated]
 pub type Numbers(
     small: i32,
     big: i64,
@@ -65,14 +70,13 @@ pub type Numbers(
     maybe: ?Array<string>,
 )
 
-#[schema]
 #[validated]
 pub type Member(
     #[notBlank] name: string,
     #[minValue(18)] age: i32,
 )
 
-#[schema]
+#[validated]
 pub type Team(
     lead: Member,
     members: Array<Member>,
@@ -91,7 +95,7 @@ fn fresh() -> i32 {
     return setMessageSource(builtInOnly());
 }
 
-fn signupCodes(r: @Result<Signup, ValidationReport>) -> string {
+fn signupCodes(r: @Result<SignupDoc, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -100,7 +104,7 @@ fn signupCodes(r: @Result<Signup, ValidationReport>) -> string {
     };
 }
 
-fn orderCodes(r: @Result<Order, ValidationReport>) -> string {
+fn orderCodes(r: @Result<OrderDoc, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -118,7 +122,7 @@ fn numberCodes(r: @Result<Numbers, ValidationReport>) -> string {
     };
 }
 
-fn signupMessages(r: @Result<Signup, ValidationReport>) -> string {
+fn signupMessages(r: @Result<SignupDoc, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -131,7 +135,7 @@ fn signupMessages(r: @Result<Signup, ValidationReport>) -> string {
 
 test "validation: a well-formed document becomes a typed record" {
     val _f = fresh();
-    val signup = try decodeSignup("""{"username": "billie", "xp": 100}""");
+    val signup = try SignupDoc.decode("""{"username": "billie", "xp": 100}""");
     assert signup.username == "billie";
     assert signup.xp == 100;
     assert signup.bio == null;
@@ -139,24 +143,25 @@ test "validation: a well-formed document becomes a typed record" {
 
 test "validation: every wrong field is reported, in declaration order" {
     val _f = fresh();
-    val r = decodeSignup("""{"username": 42, "xp": "100", "bio": 7}""");
+    val r = SignupDoc.decode("""{"username": 42, "xp": "100", "bio": 7}""");
     assert signupCodes(r)
         == "username:invalidType,xp:invalidType,bio:invalidType";
 }
 
 test "validation: the message names what was expected and what arrived" {
     val _f = fresh();
-    val r = decodeSignup("""{"username": 42, "xp": "100"}""");
+    val r = SignupDoc.decode("""{"username": 42, "xp": "100"}""");
     assert signupMessages(r)
         == "username: must be text, was a number | xp: must be a whole number, was text";
 }
 
 test "validation: a missing key is required; a missing optional key is null" {
     val _f = fresh();
-    assert signupCodes(decodeSignup("""{"xp": 1}""")) == "username:required";
-    assert signupCodes(decodeSignup("""{"username": null, "xp": 1}"""))
+    assert signupCodes(SignupDoc.decode("""{"xp": 1}"""))
         == "username:required";
-    val explicit = try decodeSignup(
+    assert signupCodes(SignupDoc.decode("""{"username": null, "xp": 1}"""))
+        == "username:required";
+    val explicit = try SignupDoc.decode(
         """{"username": "a", "xp": 1, "bio": null}""",
     );
     assert explicit.bio == null;
@@ -164,41 +169,45 @@ test "validation: a missing key is required; a missing optional key is null" {
 
 test "validation: an i32 refuses a fraction and a value outside its range" {
     val _f = fresh();
-    assert signupCodes(decodeSignup("""{"username": "a", "xp": 1.5}"""))
+    assert signupCodes(SignupDoc.decode("""{"username": "a", "xp": 1.5}"""))
         == "xp:invalidType";
-    assert signupCodes(decodeSignup("""{"username": "a", "xp": 3000000000}"""))
+    assert signupCodes(
+        SignupDoc.decode("""{"username": "a", "xp": 3000000000}"""),
+    )
         == "xp:invalidType";
-    val whole = try decodeSignup("""{"username": "a", "xp": 7.0}""");
+    val whole = try SignupDoc.decode("""{"username": "a", "xp": 7.0}""");
     assert whole.xp == 7;
-    val negative = try decodeSignup("""{"username": "a", "xp": -2147483648}""");
+    val negative = try SignupDoc.decode(
+        """{"username": "a", "xp": -2147483648}""",
+    );
     assert negative.xp < 0;
 }
 
 test "validation: a key the record does not declare is refused" {
     val _f = fresh();
-    val r = decodeSignup(
+    val r = SignupDoc.decode(
         """{"username": "a", "xp": 1, "admin": true, "role": "x"}""",
     );
     assert signupCodes(r) == "admin:unrecognizedKey,role:unrecognizedKey";
     assert signupMessages(r)
-        == "admin: admin is not a field of Signup | role: role is not a field of Signup";
+        == "admin: admin is not a field of SignupDoc | role: role is not a field of SignupDoc";
 }
 
 test "validation: a document that is not an object is one violation at the root" {
     val _f = fresh();
-    assert signupCodes(decodeSignup("[1]")) == ":invalidType";
-    assert signupCodes(decodeSignup("null")) == ":required";
+    assert signupCodes(SignupDoc.decode("[1]")) == ":invalidType";
+    assert signupCodes(SignupDoc.decode("null")) == ":required";
 }
 
 test "validation: text that is not JSON is one violation, coded invalidJson" {
     val _f = fresh();
-    assert signupCodes(decodeSignup("{nope")) == ":invalidJson";
+    assert signupCodes(SignupDoc.decode("{nope")) == ":invalidJson";
 }
 
 test "validation: parse reads a document already decoded" {
     val _f = fresh();
     val doc = try json.decode("""{"username": "billie", "xp": 3}""");
-    val signup = try parseSignup(doc);
+    val signup = try SignupDoc.parse(doc);
     assert signup.xp == 3;
 }
 
@@ -206,7 +215,7 @@ test "validation: parse reads a document already decoded" {
 
 test "validation: a nested document becomes nested records" {
     val _f = fresh();
-    val order = try decodeOrder(
+    val order = try OrderDoc.decode(
         """{"id": "o1", "ship": {"street": "Rua A", "zip": "01310-100"},
             "lines": [{"sku": "x", "quantity": 2}], "tags": ["a", "b"]}""",
     );
@@ -219,7 +228,7 @@ test "validation: a nested document becomes nested records" {
 
 test "validation: a violation names the path to the value" {
     val _f = fresh();
-    val r = decodeOrder(
+    val r = OrderDoc.decode(
         """{"id": "o1", "ship": {"street": "Rua A"},
             "lines": [{"sku": "x", "quantity": 2}, {"sku": 7, "quantity": "two"}],
             "tags": ["a", 1]}""",
@@ -230,7 +239,7 @@ test "validation: a violation names the path to the value" {
 
 test "validation: an optional record is null when absent and decoded when present" {
     val _f = fresh();
-    val r = decodeOrder(
+    val r = OrderDoc.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b"}, "billing": {"street": 1},
             "lines": [], "tags": []}""",
     );
@@ -239,7 +248,7 @@ test "validation: an optional record is null when absent and decoded when presen
 
 test "validation: an unknown key inside a nested record carries its path" {
     val _f = fresh();
-    val r = decodeOrder(
+    val r = OrderDoc.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b", "country": "BR"},
             "lines": [{"sku": "x", "quantity": 1, "gift": true}], "tags": []}""",
     );
@@ -249,7 +258,7 @@ test "validation: an unknown key inside a nested record carries its path" {
 
 test "validation: a list field refuses a value that is not a list" {
     val _f = fresh();
-    val r = decodeOrder(
+    val r = OrderDoc.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b"}, "lines": {}, "tags": "a"}""",
     );
     assert orderCodes(r) == "lines:invalidType,tags:invalidType";
@@ -257,7 +266,7 @@ test "validation: a list field refuses a value that is not a list" {
 
 test "validation: a type that names itself decodes to any depth" {
     val _f = fresh();
-    val tree = try decodeCategory(
+    val tree = try CategoryDoc.decode(
         """{"name": "root", "subcategories": [
               {"name": "a", "subcategories": [{"name": "a1", "subcategories": []}]},
               {"name": "b", "subcategories": []}]}""",
@@ -268,7 +277,7 @@ test "validation: a type that names itself decodes to any depth" {
     assert first.subcategories.length == 1;
 }
 
-fn depthOf(c: Category) -> i32 {
+fn depthOf(c: CategoryDoc) -> i32 {
     var depth = 1;
     var at = c;
     while (at.subcategories.length > 0) {
@@ -280,12 +289,12 @@ fn depthOf(c: Category) -> i32 {
 
 test "validation: a four-level recursive document decodes, a bad leaf at its path" {
     val _f = fresh();
-    val tree = try decodeCategory(
+    val tree = try CategoryDoc.decode(
         """{"name": "1", "subcategories": [{"name": "2", "subcategories": [
               {"name": "3", "subcategories": [{"name": "4", "subcategories": []}]}]}]}""",
     );
     assert depthOf(tree) == 4;
-    val r = decodeCategory(
+    val r = CategoryDoc.decode(
         """{"name": "1", "subcategories": [{"name": "2", "subcategories": [
               {"name": "3", "subcategories": [{"name": 4, "subcategories": []}]}]}]}""",
     );
@@ -325,7 +334,7 @@ fn nestedDocument(levels: i32) -> Json {
 
 test "validation: a self-reference 2000 levels deep does not exhaust the stack" {
     val _f = fresh();
-    val tree = try parseCategory(nestedDocument(2000));
+    val tree = try CategoryDoc.parse(nestedDocument(2000));
     assert depthOf(tree) == 2000;
 }
 
@@ -348,7 +357,7 @@ fn nestedText(levels: i32) -> string {
 
 test "validation: a self-reference 2000 levels deep read from JSON text" {
     val _f = fresh();
-    val tree = try decodeCategory(nestedText(2000));
+    val tree = try CategoryDoc.decode(nestedText(2000));
     assert depthOf(tree) == 2000;
 }
 
@@ -356,7 +365,7 @@ test "validation: a self-reference 2000 levels deep read from JSON text" {
 
 test "validation: every primitive, a list of lists and an optional list" {
     val _f = fresh();
-    val n = try decodeNumbers(
+    val n = try Numbers.decode(
         """{"small": 1, "big": 9007199254740991, "ratio": 0.5, "on": true,
             "extra": {"anything": [1, null]}, "grid": [[1, 2], [3]], "maybe": ["x"]}""",
     );
@@ -364,17 +373,17 @@ test "validation: every primitive, a list of lists and an optional list" {
     assert n.ratio == 0.5;
     assert n.on;
     assert n.grid.length == 2;
-    assert schemas.kindOf(n.extra) == "an object";
-    val absent = try decodeNumbers(
+    assert derived.kindOf(n.extra) == "an object";
+    val absent = try Numbers.decode(
         """{"small": 1, "big": 2, "ratio": 1, "on": false, "grid": []}""",
     );
     assert absent.maybe == null;
-    assert schemas.kindOf(absent.extra) == "null";
+    assert derived.kindOf(absent.extra) == "null";
 }
 
 test "validation: each primitive refuses the others, at its own path" {
     val _f = fresh();
-    val r = decodeNumbers(
+    val r = Numbers.decode(
         """{"small": true, "big": 1.5, "ratio": "x", "on": 1,
             "grid": [[1, "2"], 3], "maybe": [1]}""",
     );
@@ -382,44 +391,29 @@ test "validation: each primitive refuses the others, at its own path" {
         == "small:invalidType,big:invalidType,ratio:invalidType,on:invalidType,grid[0][1]:invalidType,grid[1]:invalidType,maybe[0]:invalidType";
 }
 
-// ── the schema as a value ───────────────────────────────────────────────────
+// ── one type, one schema (decision 306) ─────────────────────────────────────
 
-test "validation: schemaOf answers the same decoder as a value" {
+test "validation: a list of a validated type is a field, with each item at its path" {
     val _f = fresh();
-    val doc = try json.decode("""{"username": "billie", "xp": 100}""");
-    val bad = try json.decode("""{"username": 42}""");
-    assert schemaOfSignup().accepts(doc);
-    assert schemaOfSignup().accepts(bad) == false;
-    val signup = try schemaOfSignup().parse(doc);
-    assert signup.username == "billie";
-}
-
-test "validation: a schema composes into a list and an optional" {
-    val _f = fresh();
-    val many = schemaOfSignup().array();
     val docs = try json.decode(
-        """[{"username": "a", "xp": 1}, {"username": 2, "xp": 2}]""",
+        """{"id": "o1", "ship": {"street": "s", "zip": "z"}, "lines": [{"sku": "a", "quantity": 1}, {"sku": 2, "quantity": 2}], "tags": []}""",
     );
-    val located = case many.parse(docs) {
+    val located = case OrderDoc.parse(docs) {
         Ok(_) -> "";
         Error(report) -> report.violations
             .map({ v -> v.field + ":" + v.code })
             .join(",");
     };
-    assert located == "[1].username:invalidType";
-    val maybe = schemas.text().optional();
-    assert maybe.accepts(Json.Null);
-    assert maybe.accepts(Json.Str(value: "x"));
-    assert maybe.accepts(Json.Num(value: 1.0)) == false;
+    assert located == "lines[1].sku:invalidType";
 }
 
 // ── the checks of `#[validated]` ────────────────────────────────────────────
 
 test "validation: a decoded record is checked by its markers" {
     val _f = fresh();
-    val ok = try decodeMember("""{"name": "Ana", "age": 30}""");
+    val ok = try Member.decode("""{"name": "Ana", "age": 30}""");
     assert ok.age == 30;
-    val located = case decodeMember("""{"name": "  ", "age": 9}""") {
+    val located = case Member.decode("""{"name": "  ", "age": 9}""") {
         Ok(_) -> "";
         Error(report) -> report.violations
             .map({ v -> v.field + ":" + v.code })
@@ -430,7 +424,7 @@ test "validation: a decoded record is checked by its markers" {
 
 test "validation: a value of the wrong type is reported once, not checked as well" {
     val _f = fresh();
-    val located = case decodeMember("""{"name": 7, "age": 9}""") {
+    val located = case Member.decode("""{"name": 7, "age": 9}""") {
         Ok(_) -> "";
         Error(report) -> report.violations
             .map({ v -> v.field + ":" + v.code })
@@ -441,7 +435,7 @@ test "validation: a value of the wrong type is reported once, not checked as wel
 
 test "validation: a marker's violation inside a nested record carries the path" {
     val _f = fresh();
-    val r = decodeTeam(
+    val r = Team.decode(
         """{"lead": {"name": "", "age": 40},
             "members": [{"name": "Bia", "age": 20}, {"name": "Caio", "age": 12}]}""",
     );
@@ -450,7 +444,7 @@ test "validation: a marker's violation inside a nested record carries the path" 
 
 // ── step 4: the messages of a union and a set ───────────────────────────────
 
-#[schema]
+#[validated]
 pub type Slot(
     id: i32 | string,
     seen: Set<i32>,
@@ -459,7 +453,7 @@ pub type Slot(
 test "validation: an invalidUnion names each arm's first violation, in the type's order" {
     val _s = setMessageSource(builtInOnly());
     val doc = try json.decode("""{"id": true, "seen": [1]}""") catch Json.Null;
-    val r = parseSlot(doc);
+    val r = Slot.parse(doc);
     val text = case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -474,7 +468,7 @@ test "validation: a repeated item of a set is a duplicate at the second occurren
     val doc = try json.decode(
         """{"id": 1, "seen": [3, 4, 3, 4]}""",
     ) catch Json.Null;
-    val r = parseSlot(doc);
+    val r = Slot.parse(doc);
     val text = case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -486,7 +480,7 @@ test "validation: a repeated item of a set is a duplicate at the second occurren
 
 test "validation: an absent union is required" {
     val doc = try json.decode("""{"seen": []}""") catch Json.Null;
-    val r = parseSlot(doc);
+    val r = Slot.parse(doc);
     val text = case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -503,10 +497,9 @@ fn defaultCity() -> string {
 }
 
 fn noScore() -> i64 {
-    return schemas.widened(-1.0);
+    return derived.widened(-1.0);
 }
 
-#[schema]
 #[validated]
 pub type Settings(
     #[orElseOf(defaultCity)] city: string,
@@ -519,7 +512,7 @@ pub type Settings(
 )
 
 fn codesOf<T>(r: @Result<T, ValidationReport>) -> string {
-    return schemas
+    return derived
         .violationsOf(r)
         .map({ v -> v.field + ":" + v.code })
         .join(",");
@@ -527,7 +520,7 @@ fn codesOf<T>(r: @Result<T, ValidationReport>) -> string {
 
 test "validation: absent keys take their defaults, literal or called" {
     val doc = try json.decode("""{"level": 5, "score": 7}""") catch Json.Null;
-    val s = try parseSettings(doc);
+    val s = try Settings.parse(doc);
     assert s.city == "Recife";
     assert s.retries == 3;
     assert s.ratio == 2.5;
@@ -540,13 +533,13 @@ test "validation: a fallback answers a value that does not decode and one that f
     val wrong = try json.decode(
         """{"level": "high", "score": "x"}""",
     ) catch Json.Null;
-    val s = try parseSettings(wrong);
+    val s = try Settings.parse(wrong);
     assert s.level == 1;
     assert [s.score].join("") == "-1";
     val outOfRange = try json.decode(
         """{"level": 12, "score": 1}""",
     ) catch Json.Null;
-    val t = try parseSettings(outOfRange);
+    val t = try Settings.parse(outOfRange);
     assert t.level == 1;
 }
 
@@ -554,16 +547,16 @@ test "validation: #[present] refuses an explicit null as invalidType at the key"
     val doc = try json.decode(
         """{"middle": null, "lucky": 1}""",
     ) catch Json.Null;
-    assert codesOf(parseProfileHere(doc)) == "middle:invalidType";
+    assert codesOf(ProfileHere.parse(doc)) == "middle:invalidType";
 }
 
-#[schema]
+#[validated]
 pub type ProfileHere(
     #[present] middle: ?string,
     lucky: i32,
 )
 
-#[schema]
+#[validated]
 pub type Envelope(
     kind: string,
     #[rest] fields: Dict<string, i32>,
@@ -573,15 +566,15 @@ test "validation: a #[rest] member is decoded at its own key" {
     val doc = try json.decode(
         """{"kind": "a", "x": 1, "y": "two"}""",
     ) catch Json.Null;
-    assert codesOf(parseEnvelope(doc)) == "y:invalidType";
+    assert codesOf(Envelope.parse(doc)) == "y:invalidType";
     val ok = try json.decode("""{"kind": "a", "x": 1}""") catch Json.Null;
-    val e = try parseEnvelope(ok);
+    val e = try Envelope.parse(ok);
     assert e.fields.keys().join(",") == "x";
 }
 
 // ── step 6: the form binder ─────────────────────────────────────────────────
 
-#[schema]
+#[validated]
 pub type FormSignup(
     email: string,
     age: i32,
@@ -592,11 +585,11 @@ test "validation: bind over form pairs reports what does not read and builds not
     val pairs = try querystring.parse(
         "email=a%40b.c&age=x&tags=a&tags=b",
     ) catch [];
-    assert codesOf(bindFormSignup(pairs)) == "age:invalidType";
+    assert codesOf(FormSignup.bind(pairs)) == "age:invalidType";
     val good = try querystring.parse(
         "email=a%40b.c&age=30&tags=a&tags=b",
     ) catch [];
-    val s = try bindFormSignup(good);
+    val s = try FormSignup.bind(good);
     assert s.tags.join(",") == "a,b";
     assert s.age == 30;
     assert s.email == "a@b.c";
@@ -604,7 +597,7 @@ test "validation: bind over form pairs reports what does not read and builds not
 
 test "validation: a name the record does not declare is the unknown-key rule" {
     val pairs = try querystring.parse("email=a&age=1&admin=1") catch [];
-    assert codesOf(bindFormSignup(pairs)) == "admin:unrecognizedKey";
+    assert codesOf(FormSignup.bind(pairs)) == "admin:unrecognizedKey";
 }
 
 // ── step 8: encode is decode's inverse ──────────────────────────────────────
@@ -612,30 +605,30 @@ test "validation: a name the record does not declare is the unknown-key rule" {
 test "validation: nested records, optionals, lists, unions, sets and dicts round-trip" {
     val text = """{"id": "A1", "ship": {"street": "Rua A", "zip": "50000"}, "lines": [{"sku": "x", "quantity": 2}], "tags": ["t"]}""";
     val doc = try json.decode(text) catch Json.Null;
-    val order = try parseOrder(doc);
-    val again = try parseOrder(try encodeOrder(order));
+    val order = try OrderDoc.parse(doc);
+    val again = try OrderDoc.parse(try OrderDoc.encode(order));
     assert again.ship.zip == "50000";
     assert again.billing == null;
     assert again.lines.map({ l -> l.sku }).join(",") == "x";
-    val slot = try parseSlot(
+    val slot = try Slot.parse(
         try json.decode("""{"id": "s-1", "seen": [3, 1]}""") catch Json.Null,
     );
-    val slotAgain = try parseSlot(try encodeSlot(slot));
+    val slotAgain = try Slot.parse(try Slot.encode(slot));
     assert slotAgain.id is string;
     assert slotAgain.seen.size() == 2;
-    val env = try parseEnvelope(
+    val env = try Envelope.parse(
         try json.decode("""{"kind": "a", "x": 1, "y": 2}""") catch Json.Null,
     );
-    val envAgain = try parseEnvelope(try encodeEnvelope(env));
+    val envAgain = try Envelope.parse(try Envelope.encode(env));
     assert envAgain.fields.keys().join(",") == "x,y";
 }
 
 // ── step 11: a variant by reference ─────────────────────────────────────────
 
-#[schema]
+#[validated]
 pub type Bait { Worm, Fly, Lure }
 
-#[schema]
+#[validated]
 pub type Rig(
     #[orElse(.Fly)] bait: Bait,
     #[fallback(.Worm)] spare: Bait,
@@ -643,8 +636,34 @@ pub type Rig(
 
 test "validation: an enum default and fallback are its variants, by reference" {
     val doc = try json.decode("""{"spare": "Plastic"}""") catch Json.Null;
-    val rig = try parseRig(doc);
+    val rig = try Rig.parse(doc);
     assert rig.bait == Bait.Fly;
     assert rig.spare == Bait.Worm;
-    assert jsonSchemaOfRig().contains("\"default\":\"Fly\"");
+    assert Rig.jsonSchema().contains("\"default\":\"Fly\"");
+}
+
+// ── step 12: a transparent type ─────────────────────────────────────────────
+
+#[validated(transparent)]
+pub type Email(#[email] value: string)
+
+#[validated]
+pub type Invitation(owner: Email, guests: Array<Email>)
+
+test "validation: a transparent type decodes, checks and encodes as its one field" {
+    val doc = try json.decode(
+        """{"owner": "a@b.c", "guests": ["c@d.e", "nope"]}""",
+    ) catch Json.Null;
+    assert codesOf(Invitation.parse(doc)) == "guests[1]:email";
+    val ok = try json.decode(
+        """{"owner": "a@b.c", "guests": []}""",
+    ) catch Json.Null;
+    val invitation = try Invitation.parse(ok);
+    assert invitation.owner.value == "a@b.c";
+    val back = try Invitation.encode(invitation);
+    assert derived.jsonText(back) == "{\"owner\":\"a@b.c\",\"guests\":[]}";
+    val single = try Email.decode("\"x@y.z\"");
+    assert single.value == "x@y.z";
+    assert Email.jsonSchema()
+        == "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"string\",\"format\":\"email\"}";
 }

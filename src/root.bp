@@ -24,7 +24,7 @@ pub mod report;
 pub mod table;
 pub mod messages;
 pub mod locales;
-pub mod schemas;
+pub mod derived;
 pub mod spi;
 pub mod formats;
 pub mod constraints;

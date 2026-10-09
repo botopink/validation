@@ -1,5 +1,5 @@
 // The suite case of the front's example, byte for byte but for the import
-// lines: a module of this package names it by path (`import {schemas};`,
+// lines: a module of this package names it by path (`import {derived};`,
 // decision 206), an application by `from "validation"`.
 //
 // Front 125 — validation: Zod's feature set · examples/error-views-example.bp
@@ -20,13 +20,14 @@
 // Target: both. `pretty()` is compared as one literal on both targets, so the
 // two cannot drift by a space.
 
-import {decorators.schema};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation, report.Flat, report.ReportTree};
+import {decorators.validated};
+import {derived};
+import {report.ValidationReport, report.Violation, report.Flat, report.ReportTree};
 import {messages.setMessageSource, messages.builtInOnly};
 import {json.Json} from "std";
+import {table.constraintTableJson};
 
-#[schema]
+#[validated]
 pub type Player(
     username: string,
     favoriteNumbers: Array<i32>,
@@ -34,7 +35,7 @@ pub type Player(
 
 fn failing() -> ValidationReport {
     val _s = setMessageSource(builtInOnly());
-    return case decodePlayer(
+    return case Player.decode(
         """{"username": 1234, "favoriteNumbers": [1234, "4567"], "extraKey": 1234}""",
     ) {
         Ok(_) -> ValidationReport.empty();

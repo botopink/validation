@@ -90,7 +90,7 @@ test "validation: a union is a generic argument and is tells its arms apart" {
 // ── a generic value as an optional ──────────────────────────────────────────
 
 // `fn some<T>(v: T) -> ?T { return v; }` is "recursive type detected". The
-// optional is read out of a one-item list instead (`schemas.bp` `present`).
+// optional is read out of a one-item list instead (`derived.bp` `present`).
 fn some<T>(v: T) -> ?T {
     return [v].at(0);
 }

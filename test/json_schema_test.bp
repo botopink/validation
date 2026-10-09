@@ -1,14 +1,14 @@
-//// validation — `jsonSchemaOf<T>` against ZOD_DOCUMENTATION.md § 8's own
+//// validation — `T.jsonSchema()` against ZOD_DOCUMENTATION.md § 8's own
 //// documents (front 125 step 9), key order aside: each literal is the
 //// reference's, and a node is compared to it as JSON (`sameJson`), members in
 //// any order. A document is `$schema` plus the reference's object; a format,
 //// a nullability or a metadata case is the node of one field.
 
-import {decorators.schema, decorators.validated, decorators.email, decorators.isoDatetime, decorators.isoDate, decorators.isoDuration};
+import {decorators.validated, decorators.email, decorators.isoDatetime, decorators.isoDate, decorators.isoDuration};
 import {decorators.ipv4, decorators.ipv6, decorators.uuid, decorators.guid, decorators.url, decorators.base64, decorators.minLength};
 import {decorators.title, decorators.describe};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation, table, table.constraintTableJson};
+import {derived};
+import {report.ValidationReport, report.Violation, table, table.constraintTableJson};
 import {constraints.vEmail, constraints.vIsoDatetime, constraints.vIsoDate, constraints.vIsoDuration, constraints.vIpv4, constraints.vIpv6};
 import {constraints.vUuid, constraints.vGuid, constraints.vUrl, constraints.vBase64, constraints.vMinLength};
 import {json, json.Json} from "std";
@@ -17,7 +17,7 @@ fn sameJson(a: Json, b: Json) -> bool {
     return case a {
         Obj(am) -> sameMembers(am, b.members()) && b.isObject();
         Arr(ai) -> sameItems(ai, b.items()) && b.kindName() == "an array";
-        _ -> schemas.jsonText(a) == schemas.jsonText(b);
+        _ -> derived.jsonText(a) == derived.jsonText(b);
     };
 }
 
@@ -55,15 +55,14 @@ fn fieldNode(doc: string, name: string) -> Json {
 }
 
 // § 8.2 `z.object({ name: z.string(), age: z.number() })`
-#[schema]
+#[validated]
 pub type Person(name: string, age: f64)
 
 // § 8.2 `cycles`: `z.object({ name: z.string(), get friend() { return User } })`
-#[schema]
+#[validated]
 pub type Friend(name: string, friend: Friend)
 
 // § 8.3 String Formats, Nullability, and § 8.2 `metadata`
-#[schema]
 #[validated]
 pub type Formats(
     #[email] email: string,
@@ -83,19 +82,21 @@ pub type Formats(
 
 test "validation: an object is the reference's document (§ 8.2)" {
     assert sameJson(
-        withoutSchema(jsonSchemaOfPerson()),
+        withoutSchema(Person.jsonSchema()),
         parsed(
             """{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "number"}}, "required": ["name", "age"], "additionalProperties": false}""",
         ),
     );
-    assert jsonSchemaOfPerson().startsWith(
-        "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",",
-    );
+    assert Person
+        .jsonSchema()
+        .startsWith(
+            "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",",
+        );
 }
 
 test "validation: a recursive object refers to the root (§ 8.2 cycles)" {
     assert sameJson(
-        withoutSchema(jsonSchemaOfFriend()),
+        withoutSchema(Friend.jsonSchema()),
         parsed(
             """{"type": "object", "properties": {"name": {"type": "string"}, "friend": {"$ref": "#"}}, "required": ["name", "friend"], "additionalProperties": false}""",
         ),
@@ -103,7 +104,7 @@ test "validation: a recursive object refers to the root (§ 8.2 cycles)" {
 }
 
 test "validation: the string formats are the reference's nodes (§ 8.3)" {
-    val doc = jsonSchemaOfFormats();
+    val doc = Formats.jsonSchema();
     val expected: Array<#(string, string)> = [
         #("email", """{"type": "string", "format": "email"}"""),
         #("at", """{"type": "string", "format": "date-time"}"""),
@@ -123,7 +124,7 @@ test "validation: the string formats are the reference's nodes (§ 8.3)" {
 }
 
 test "validation: nullability is the reference's (§ 8.3)" {
-    val doc = jsonSchemaOfFormats();
+    val doc = Formats.jsonSchema();
     assert sameJson(
         fieldNode(doc, "plain"),
         parsed("""{"type": ["string", "null"]}"""),
@@ -138,21 +139,21 @@ test "validation: nullability is the reference's (§ 8.3)" {
 
 test "validation: metadata is the reference's annotations (§ 8.2 metadata)" {
     assert sameJson(
-        fieldNode(jsonSchemaOfFormats(), "contact"),
+        fieldNode(Formats.jsonSchema(), "contact"),
         parsed(
             """{"type": "string", "title": "Email address", "description": "Your email address"}""",
         ),
     );
 }
 
-#[schema]
+#[validated]
 pub type Post(title: string, author: Writer)
 
-#[schema]
+#[validated]
 pub type Writer(name: string, posts: Array<Post>)
 
 test "validation: another type is a $def, and draft-07 calls them definitions" {
-    val doc = jsonSchemaOfPost();
+    val doc = Post.jsonSchema();
     assert sameJson(
         withoutSchema(doc),
         parsed(

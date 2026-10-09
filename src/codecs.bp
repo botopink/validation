@@ -12,7 +12,7 @@
 //// (`language-gaps.md`).
 
 import {formats.isIsoDatetimeOffset, formats.isUrl};
-import {schemas.jsonText, schemas.numberText};
+import {derived.jsonText, derived.numberText};
 import {json, json.Json, io.clock, encoding, url, url.Url, math} from "std";
 
 // ── numbers from text ───────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ pub fn textToFloat(text: string) -> @Result<f64, string> {
     return try text.parseFloat();
 }
 
-// The shortest text that reads back as `n` (`schemas.numberText`).
+// The shortest text that reads back as `n` (`derived.numberText`).
 pub fn floatToText(n: f64) -> string {
     return numberText(n);
 }
@@ -63,9 +63,10 @@ pub fn isoToMillis(text: string) -> @Result<i64, string> {
     return try clock.parseIso8601(text);
 }
 
-// Always UTC, always milliseconds: `2024-01-15T10:30:00.000Z`. Written here
-// rather than `clock.formatIso8601`, which answers the host's local time
-// without milliseconds on erlang and UTC with them on node.
+// Always UTC, always milliseconds: `2024-01-15T10:30:00.000Z`.
+// LANGUAGE GAP: std's `clock.formatIso8601` answers the host's local time
+// without milliseconds on erlang and UTC with them on node, so the text is
+// written here.
 pub fn millisToIso(ms: i64) -> string {
     val t = floatOfI64(ms);
     val days = math.floor(t / 86400000.0);
@@ -139,7 +140,7 @@ pub fn textToJson(text: string) -> @Result<Json, string> {
 }
 
 // The document as JSON text, members in order, no whitespace; a number as
-// `floatToText` writes it (`schemas.jsonText`).
+// `floatToText` writes it (`derived.jsonText`).
 pub fn jsonToText(j: Json) -> string {
     return jsonText(j);
 }
@@ -210,7 +211,7 @@ pub fn boolToText(b: bool) -> string {
     if (b) return "true" else return "false";
 }
 
-// ── conversions the language has no spelling for (see `schemas.bp`) ───────
+// ── conversions the language has no spelling for (see `derived.bp`) ───────
 
 #[@External.Node("Math.trunc($0)")]
 #[@External.Erlang("trunc($0)")]

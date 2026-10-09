@@ -14,7 +14,7 @@
     "messages.bp",
     "locales.bp",
     "formats.bp",
-    "schemas.bp",
+    "derived.bp",
     "table.bp",
     "spi.bp",
     "constraints.bp",

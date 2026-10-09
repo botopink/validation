@@ -22,7 +22,7 @@
 //// `cpf` makes the report INVALID, with the name in the message, at the first
 //// validation call.
 
-import {schemas.jsonText, schemas.refsRenamed, schemas.refsPrefixed};
+import {derived.jsonText, derived.refsRenamed, derived.refsPrefixed};
 import {json, json.Json} from "std";
 import {report.Violation, report.violation, report.noViolation, report.oneViolation};
 import {messages.message, messages.builtInTemplate, messages.arg, messages.noArgs};
@@ -180,7 +180,7 @@ pub fn clearSchemas() -> i32 {
 }
 
 // `{"schemas": {<id>: <schema>, …}}` in registration order — each schema with
-// its `id` first, no `$schema` and no `$defs`, a `$ref` to another type written
+// its `id` first, no `$schema`, `$id` or `$defs`, a `$ref` to another type written
 // as that type's name (`"Post"`) and one to itself as its own id
 // (ZOD_DOCUMENTATION.md § 8.4).
 pub fn registeredJsonSchemas() -> string {
@@ -192,7 +192,7 @@ fn registryEntry(id: string, doc: string) -> #(string, Json) {
     val tree = try json.decode(doc) catch Json.Null;
     val kept = tree
         .members()
-        .filter({ m -> m[0] != "$schema" && m[0] != "$defs" });
+        .filter({ m -> m[0] != "$schema" && m[0] != "$id" && m[0] != "$defs" });
     val node = refsRenamed(
         Json.Obj([#("id", Json.Str(id))].append(kept)),
         "#",

@@ -63,8 +63,8 @@ pub fn messageSource() -> MessageSource {
 
 // ── the per-parse source ────────────────────────────────────────────────────
 //
-// `Schema.parseWith(input, source)` (Zod's `.parse(x, { error })`): a source
-// for one call, consulted before the installed one and falling back to it. It
+// `underSource(source, run)` (Zod's `.parse(x, { error })`): a source for one
+// call, consulted before the installed one and falling back to it. It
 // is held where the call runs — the process dictionary on erlang (key
 // `{validation, parse}`), the `parse` member of the node cell (read as absent
 // when never set, so the cell's init literal is unchanged) — and cleared when
@@ -90,6 +90,16 @@ pub fn useParseSource(source: MessageSource) -> i32 {
 
 pub fn clearParseSource() -> i32 {
     return dropParseSource();
+}
+
+// Zod's `.parse(x, { error })`: `run` — a parse — with its messages from
+// `source` first and the installed source after; a field's own `#[message]` /
+// `#[typeMessage]` still wins (`messages.underSource(pt, { -> Account.parse(doc) })`).
+pub fn underSource<T>(source: MessageSource, run: fn() -> T) -> T {
+    val _in = useParseSource(source);
+    val out = run();
+    val _out = clearParseSource();
+    return out;
 }
 
 // One placeholder binding. `name` is written without the braces.

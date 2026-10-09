@@ -29,7 +29,7 @@
 //// constraint argument carrying `;` or `|` is refused at compile time by the
 //// decorator, so the grammar has no escape and needs none.
 
-import {schemas.jsonText, schemas.refsPrefixed, schemas.refsRenamed};
+import {derived.jsonText, derived.refsPrefixed, derived.refsRenamed};
 import {json, json.Json} from "std";
 
 pub fn splitBlob(blob: string) -> string[] {

@@ -1,5 +1,5 @@
 // The suite case of the front's example, byte for byte but for the import
-// lines: a module of this package names it by path (`import {schemas};`,
+// lines: a module of this package names it by path (`import {derived};`,
 // decision 206), an application by `from "validation"`.
 //
 // Front 125 — validation: Zod's feature set · examples/object-policy-example.bp
@@ -20,35 +20,36 @@
 //
 // Target: both.
 
-import {decorators.schema, decorators.stripUnknown, decorators.rest, decorators.present, decorators.orElse, decorators.fallback};
-import {schemas};
-import {schemas.Schema, report.ValidationReport, report.Violation};
+import {decorators.stripUnknown, decorators.rest, decorators.present, decorators.orElse, decorators.fallback};
+import {derived};
+import {report.ValidationReport, report.Violation};
 import {collections.Dict, json.Json} from "std";
+import {decorators.validated, table.constraintTableJson};
 
 // The default refuses what it does not declare.
-#[schema]
+#[validated]
 pub type StrictDog(name: string)
 
 // `z.object` — the extra key is dropped, silently, because the type says so.
-#[schema]
+#[validated]
 #[stripUnknown]
 pub type Dog(name: string)
 
 // `z.looseObject` — the extra members are kept, in document order.
-#[schema]
+#[validated]
 pub type LooseDog(
     name: string,
     #[rest] extra: Dict<string, Json>,
 )
 
 // `.catchall(z.string())` — the extra members must all be strings.
-#[schema]
+#[validated]
 pub type TaggedDog(
     name: string,
     #[rest] tags: Dict<string, string>,
 )
 
-#[schema]
+#[validated]
 pub type Profile(
     // `.optional()` — the key may be absent or null.
     nick: ?string,
@@ -76,17 +77,17 @@ fn dogCodes(r: @Result<StrictDog, ValidationReport>) -> string {
 
 test "validation: an undeclared key is a violation by default" {
     // `StrictDog.parse({ name: "Yeller", extraKey: true })` throws.
-    val r = decodeStrictDog("""{"name": "Yeller", "extraKey": true}""");
+    val r = StrictDog.decode("""{"name": "Yeller", "extraKey": true}""");
     assert dogCodes(r) == "extraKey:unrecognizedKey";
 }
 
 test "validation: #[stripUnknown] drops it" {
-    val dog = try decodeDog("""{"name": "Yeller", "extraKey": true}""");
+    val dog = try Dog.decode("""{"name": "Yeller", "extraKey": true}""");
     assert dog.name == "Yeller";
 }
 
 test "validation: a #[rest] field keeps what was not declared" {
-    val dog = try decodeLooseDog(
+    val dog = try LooseDog.decode(
         """{"name": "Yeller", "extraKey": true, "age": 3}""",
     );
     assert dog.extra.keys().join(",") == "extraKey,age";
@@ -94,16 +95,16 @@ test "validation: a #[rest] field keeps what was not declared" {
 
 test "validation: a typed #[rest] field checks the extras" {
     // `DogWithStrings.parse({ name: "Yeller", extraKey: 42 })` fails.
-    val r = decodeTaggedDog("""{"name": "Yeller", "extraKey": 42}""");
+    val r = TaggedDog.decode("""{"name": "Yeller", "extraKey": 42}""");
     assert r.isError();
-    val ok = try decodeTaggedDog(
+    val ok = try TaggedDog.decode(
         """{"name": "Yeller", "extraKey": "extraValue"}""",
     );
     assert ok.tags.at("extraKey") ?? "" == "extraValue";
 }
 
 test "validation: absent, null, default and fallback are four different answers" {
-    val p = try decodeProfile("""{"lucky": "tuna"}""");
+    val p = try Profile.decode("""{"lucky": "tuna"}""");
     assert p.nick == null;
     assert p.middle == null;
     assert p.food == "tuna";
@@ -112,11 +113,11 @@ test "validation: absent, null, default and fallback are four different answers"
 
 test "validation: #[present] accepts an absent key and refuses an explicit null" {
     // `User.parse({ nick: undefined })` fails for `exactOptional`.
-    val r = decodeProfile("""{"middle": null, "lucky": 1}""");
+    val r = Profile.decode("""{"middle": null, "lucky": 1}""");
     assert r.isError();
 }
 
 test "validation: a default is the absent case only — a wrong value is still wrong" {
-    val r = decodeProfile("""{"food": 7, "lucky": 1}""");
+    val r = Profile.decode("""{"food": 7, "lucky": 1}""");
     assert r.isError();
 }
