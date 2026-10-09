@@ -127,12 +127,14 @@ test "validation: the structural codes have built-in templates" {
     assert builtInTemplate("unrecognizedKey")
         == "{key} is not a field of {type}";
     assert builtInTemplate("invalidUnion")
-        == "matches none of the accepted forms";
+        == "matches none of the accepted forms - {arms}";
     assert builtInTemplate("invalidValue") == "must be one of {options}";
     assert builtInTemplate("duplicate") == "repeats an earlier item";
     assert builtInTemplate("invalidJson")
         == "is not a JSON document - {reason}";
     assert builtInTemplate("custom") == "is not valid";
+    assert builtInTemplate("literal") == "must be {expected}";
+    assert builtInTemplate("oneOf") == "must be one of {options}";
 }
 
 test "validation: a structural message interpolates its own parameters" {

@@ -66,6 +66,8 @@ pub fn paramNames(code: string) -> string[] {
     if (code == "multipleOf") return ["step"];
     if (code == "afterIso") return ["instant"];
     if (code == "beforeIso") return ["instant"];
+    if (code == "literal") return ["expected"];
+    if (code == "oneOf") return ["options"];
     val none: string[] = [];
     return none;
 }

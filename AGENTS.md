@@ -43,8 +43,10 @@ validation/
 │   │                   currentLocale, templateFor, interpolate, message, builtInTemplate, showI32/I64/F64
 │   ├── schemas.bp      Schema<T> (parse, parseAt, decode, accepts, optional, array), of, text, int, long,
 │   │                   float, boolean, anyJson; the decoders decodeString/Int/Long/Float/Bool/Json,
-│   │                   optionalOf, decodeArrayOf; what `#[schema]` calls: memberPath,
-│   │                   objectProblems, unknownKeys, violationsOf, under, decodeText; kindOf, isNull, shown
+│   │                   optionalOf, decodeArrayOf, decodeSetOf, decodeDictOf, decodeIntKey; what
+│   │                   `#[schema]` calls: memberPath, indexPath, objectProblems, unknownKeys,
+│   │                   violationsOf, under, decodeText, required, variantName, noArm, tupleItems,
+│   │                   itemOf, absentKeys, without; kindOf, isNull, shown
 │   │                   (three conversion cells: wholeI32, wholeI64, isWhole)
 │   ├── spi.bp          Constraint, registerConstraint, constraintRegistered, registeredConstraints,
 │   │                   clearConstraints, unknownConstraintMessage, vConstraint   (registry: templates)
@@ -53,8 +55,10 @@ validation/
 │   ├── constraints.bp  the v* predicates (std `regex`, `unicode`, `io.clock`, `formats.bp`), emailPattern
 │   ├── binding.bp      bindInt, bindBool, bindRequired, bindEpochMillis, bindingReport, bindingCount,
 │   │                   bindingReset, bindingIsolated, isIntegerText, parseI32   (accumulator: templates)
-│   └── decorators.bp   #[validated], the 71 constraint markers (`markerNames()`), markerRule; #[schema]
-└── test/             binding · checks_and_formats_example · constraints · messages · nested_and_arrays_example · parity · path ·
+│   └── decorators.bp   #[validated], the 73 constraint markers (`markerNames()`), markerRule; #[schema],
+│                       #[tag], #[exhaustive]
+└── test/             binding · checks_and_formats_example · collections_example · constraints ·
+                      enums_and_unions_example · messages · nested_and_arrays_example · parity · path ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
                       spi · table   (suite `validation:`)
 ```
@@ -108,12 +112,15 @@ violations there, compare its count and this process's) and stated on node
 
 ## The markers
 
-`decorators.markerNames()` lists the 71 markers `#[validated]` reads, in file
-order: the thirteen of step 2 and the 58 of front 125 step 3 — string checks
+`decorators.markerNames()` lists the 73 markers `#[validated]` reads, in file
+order: the thirteen of step 2, the 58 of front 125 step 3 — string checks
 (`minLength`, `maxLength`, `length`, `startsWith`, `endsWith`, `includes`,
 `uppercase`, `lowercase`), string formats (`emailHtml5` … `isoDuration`, rules
 in `formats.bp`), numbers (`gt`, `lt`, `negative`, `negativeOrZero`,
-`multipleOf`, `safeInt`, `float32`) and date bounds (`afterIso`, `beforeIso`).
+`multipleOf`, `safeInt`, `float32`) and date bounds (`afterIso`, `beforeIso`) —
+and the two of step 4: `literal` (a `string`, `i32` or `bool` field held to one
+value; the argument's lexeme is read as the field's type) and `oneOf` (a text
+field held to a closed set, the options comma-joined in one argument).
 
 - **Field types.** Every marker names the types it checks; on any other it is a
   located compile error (`test/refusal_test.bp`: one row per marker, and the
@@ -152,9 +159,30 @@ pub fn schemaOf<TypeName>() -> Schema<TypeName>
 ```
 
 - **Fields it decodes:** `string`, `i32`, `i64`, `f64`, `bool`, `Json`, `?T`,
-  `Array<T>` / `T[]` in any nesting, and another `#[schema]` record — the
-  record itself included — reached by calling `parse<ThatType>At` by name. Any
-  other field type is a located compile error naming the field and the type.
+  `Array<T>` / `T[]`, `Set<T>` (a list; a repeated item is `duplicate` at its
+  own index), `Dict<K, V>` (an object; `K` is `string`, `i32` — the key text
+  read by the integer grammar — or a `#[schema]` enum), a tuple `#(A, B, …)` (a
+  list of exactly that length, each item at `at[i]`; a labelled tuple is
+  refused), a union `A | B` (the arms in the type's order, the first that
+  accepts; none → one `invalidUnion` whose `{arms}` names each arm's first
+  violation; absent is `required` unless an arm is `?T` or `Json`), in any
+  nesting, and another `#[schema]` record or enum — the type itself included —
+  reached by calling `parse<ThatType>At` by name. Any other field type is a
+  located compile error naming the field and the type.
+- **Enums.** `#[schema]` on a payload-less enum decodes the variant's NAME
+  (`"Tuna"` → `Fish.Tuna`); absent is `required`, another kind `invalidType`,
+  another text `invalidValue` with `{options}`. It also emits
+  `optionsOf<TypeName>() -> Array<string>`, the variants in declaration order —
+  what `#[exhaustive]` on a `Dict<Key, V>` field reads (every variant a key, else
+  `required` at `field.<Variant>`). With `#[tag("status")]` the enum is an
+  object whose member `status` names the variant and whose other members are
+  the payload: a `#[schema]` record named `<Enum><Variant>` (`ReplySuccess`),
+  held as the variant's one field `value` (`Success(value: ReplySuccess)`).
+  Not the variant's own name — a variant's constructor is a name of its module,
+  so a record `Success` beside `Reply.Success` is constructed as the variant.
+  `Decl.variants` carries names only (`language-gaps.md`), so a payload a
+  variant does not have, or a missing payload record, fails where the emitted
+  code names it rather than at the annotation.
 - **Every violation, at its path.** Each field is decoded, every violation is
   collected, and the record is constructed only when there are none.
   `Violation.field` is a path (`path.bp`): `ship.zip`, `lines[1].sku`, `` for
@@ -175,8 +203,9 @@ pub fn schemaOf<TypeName>() -> Schema<TypeName>
   is a compile error.
 - **Structural codes** (built-in templates in `messages.bp`): `invalidType`
   (`{expected}`, `{received}`), `required`, `unrecognizedKey` (`{key}`,
-  `{type}`), `invalidJson` (`{reason}`); `invalidUnion`, `invalidValue`,
-  `duplicate` and `custom` are declared for the steps that follow.
+  `{type}`), `invalidJson` (`{reason}`), `invalidUnion` (`{arms}`),
+  `invalidValue` (`{options}`), `duplicate`; `custom` is declared for the
+  steps that follow.
 
 What the application has in scope — the emitted code names the library through
 ONE namespace, and the types its signatures spell are leaves:
@@ -187,9 +216,12 @@ import {schemas, schemas.Schema, report.ValidationReport, report.Violation} from
 import {json.Json} from "std";
 ```
 
-A wrapper level under a field (`Array<Array<i32>>`, `?Array<string>`) gets one
-emitted function, `__decode<Record>_<field>_<depth>`, because a library decoder
-cannot be passed as a value from emitted code (see *Language notes*).
+Each part of a field's type below the field's own level (`Array<Array<i32>>`,
+`?Array<string>`, a `Dict`'s key and value) gets one emitted function,
+`__decode<Record>_<field>_<place>` (`0` the field, `0_1` its second part, …),
+because a library decoder cannot be passed as a value from emitted code (see
+*Language notes*); a tuple and a union get one for themselves, their
+straight-line decoder.
 
 `#[validated]` still emits bare names (`vNotBlank(…)`), so a type that carries
 both imports the predicates too. Decision 145 moves `#[validated]` to the
@@ -280,6 +312,10 @@ library writes instead.
 - `val assert Ok(v) = r;` inside an `if` inside a `while` leaves `v` undefined
   on commonJS. Use a `case` as an expression:
   `out = case r { Ok(v) -> out.append([v]); Error(_) -> out; };`.
+- An enum variant's constructor is a name of its module: a record `Success`
+  declared beside `type Reply { Success(value: …) }` is constructed as the
+  variant (`` `Success` has no parameter named `data` ``). A tagged enum's
+  payload record is named `<Enum><Variant>` (`ReplySuccess`).
 - A function named like a primitive type (`pub fn string()`) shadows the type
   in every annotation of its module; the mismatch is reported far from the
   cause ("expected string, got function"). Hence `schemas.text()`.

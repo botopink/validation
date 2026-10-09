@@ -16,7 +16,7 @@ import {schemas};
 import {schemas.Schema};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
-import {json, json.Json} from "std";
+import {json, json.Json, collections.Set} from "std";
 
 #[schema]
 pub type Signup(
@@ -445,4 +445,52 @@ test "validation: a marker's violation inside a nested record carries the path" 
             "members": [{"name": "Bia", "age": 20}, {"name": "Caio", "age": 12}]}""",
     );
     assert teamCodes(r) == "lead.name:notBlank,members[1].age:minValue";
+}
+
+// ── step 4: the messages of a union and a set ───────────────────────────────
+
+#[schema]
+pub type Slot(
+    id: i32 | string,
+    seen: Set<i32>,
+)
+
+test "validation: an invalidUnion names each arm's first violation, in the type's order" {
+    val _s = setMessageSource(builtInOnly());
+    val doc = try json.decode("""{"id": true, "seen": [1]}""") catch Json.Null;
+    val r = parseSlot(doc);
+    val text = case r {
+        Ok(_) -> "";
+        Error(report) -> report.violations
+            .map({ v -> [v.field, v.code, v.message].join("|") })
+            .join(",");
+    };
+    assert text
+        == "id|invalidUnion|matches none of the accepted forms - must be a whole number, was a boolean; must be text, was a boolean";
+}
+
+test "validation: a repeated item of a set is a duplicate at the second occurrence" {
+    val doc = try json.decode(
+        """{"id": 1, "seen": [3, 4, 3, 4]}""",
+    ) catch Json.Null;
+    val r = parseSlot(doc);
+    val text = case r {
+        Ok(_) -> "";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+    assert text == "seen[2]:duplicate,seen[3]:duplicate";
+}
+
+test "validation: an absent union is required" {
+    val doc = try json.decode("""{"seen": []}""") catch Json.Null;
+    val r = parseSlot(doc);
+    val text = case r {
+        Ok(_) -> "";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+    assert text == "id:required";
 }

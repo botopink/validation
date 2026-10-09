@@ -142,7 +142,8 @@ pub fn builtInTemplate(code: string) -> string {
     if (code == "required") return "must be present";
     if (code == "invalidType") return "must be {expected}, was {received}";
     if (code == "unrecognizedKey") return "{key} is not a field of {type}";
-    if (code == "invalidUnion") return "matches none of the accepted forms";
+    if (code == "invalidUnion")
+        return "matches none of the accepted forms - {arms}";
     if (code == "invalidValue") return "must be one of {options}";
     if (code == "duplicate") return "repeats an earlier item";
     if (code == "invalidJson") return "is not a JSON document - {reason}";
@@ -209,6 +210,8 @@ pub fn builtInTemplate(code: string) -> string {
     if (code == "float32") return "must fit a 32-bit float";
     if (code == "afterIso") return "must be after {instant}";
     if (code == "beforeIso") return "must be before {instant}";
+    if (code == "literal") return "must be {expected}";
+    if (code == "oneOf") return "must be one of {options}";
     return "is not valid";
 }
 

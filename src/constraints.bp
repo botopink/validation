@@ -74,6 +74,23 @@ pub fn vNotEmptyList<T>(field: string, value: Array<T>) -> Array<Violation> {
         return fail(field, "notEmpty", showI32(value.length), noArgs());
 }
 
+pub fn vNotEmptyDict<K, V>(
+    field: string,
+    value: Dict<K, V>,
+) -> Array<Violation> {
+    if (value.size() > 0)
+        return noViolation()
+    else
+        return fail(field, "notEmpty", showI32(value.size()), noArgs());
+}
+
+pub fn vNotEmptySet<T>(field: string, value: Set<T>) -> Array<Violation> {
+    if (value.size() > 0)
+        return noViolation()
+    else
+        return fail(field, "notEmpty", showI32(value.size()), noArgs());
+}
+
 // ── size ────────────────────────────────────────────────────────────────────
 //
 // Both bounds are passed because a declared parameter default is never applied
@@ -428,6 +445,69 @@ pub fn vLengthSet<T>(
         value.size(),
         length,
         showI32(value.size()),
+    );
+}
+
+// ── step 4: literals and closed sets ────────────────────────────────────────
+//
+// `#[literal(x)]` holds a field to one value, `#[oneOf("a,b")]` a text field to
+// a closed set (the comma-joined argument: a decorator argument is one raw
+// lexeme). The message names what was expected.
+
+pub fn vLiteral(
+    field: string,
+    value: string,
+    expected: string,
+) -> Array<Violation> {
+    return checkWith(
+        value == expected,
+        field,
+        "literal",
+        value,
+        [arg("expected", expected)],
+    );
+}
+
+pub fn vLiteralI32(
+    field: string,
+    value: i32,
+    expected: i32,
+) -> Array<Violation> {
+    return checkWith(
+        value == expected,
+        field,
+        "literal",
+        showI32(value),
+        [arg("expected", showI32(expected))],
+    );
+}
+
+pub fn vLiteralBool(
+    field: string,
+    value: bool,
+    expected: bool,
+) -> Array<Violation> {
+    return checkWith(
+        value == expected,
+        field,
+        "literal",
+        [value].join(""),
+        [arg("expected", [expected].join(""))],
+    );
+}
+
+pub fn vOneOf(
+    field: string,
+    value: string,
+    options: string,
+) -> Array<Violation> {
+    val allowed = options.split(",");
+    return checkWith(
+        allowed.indexOf(value) >= 0,
+        field,
+        "oneOf",
+        value,
+        [arg("options", allowed.join(", "))],
     );
 }
 

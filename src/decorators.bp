@@ -100,8 +100,12 @@ pub fn validated(comptime decl: @Decl) {
                     call = "vNotEmpty(" + q + ", " + read + ")"
                 else if (isList)
                     call = "vNotEmptyList(" + q + ", " + read + ")"
+                else if (t.startsWith("Dict<"))
+                    call = "vNotEmptyDict(" + q + ", " + read + ")"
+                else if (t.startsWith("Set<"))
+                    call = "vNotEmptySet(" + q + ", " + read + ")"
                 else
-                    why = "it applies to `string` and `Array<T>`, and this field is `"
+                    why = "it applies to `string`, `Array<T>`, `Dict<K, V>` and `Set<T>`, and this field is `"
                         + declared
                         + "`";
             if (n == "sizeBetween")
@@ -556,6 +560,25 @@ fn markerRule(
         if (t != "f64") return refusedOn("`f64`", declared);
         return "vFloat32(" + q + ", " + read + ")";
     }
+    if (n == "literal") {
+        if (t == "string")
+            return "vLiteral(" + q + ", " + read + ", " + first + ")";
+        if (t == "i32") {
+            if (isFractionLexeme(first) || first.startsWith("\""))
+                return "!the literal `" + first + "` is not an `i32`";
+            return "vLiteralI32(" + q + ", " + read + ", " + first + ")";
+        }
+        if (t == "bool") {
+            if (first != "true" && first != "false")
+                return "!the literal `" + first + "` is not a `bool`";
+            return "vLiteralBool(" + q + ", " + read + ", " + first + ")";
+        }
+        return refusedOn("`string`, `i32` and `bool`", declared);
+    }
+    if (n == "oneOf") {
+        if (t != "string") return refusedOn("`string`", declared);
+        return "vOneOf(" + q + ", " + read + ", " + first + ")";
+    }
     if (n == "afterIso" || n == "beforeIso") {
         if (t != "i64")
             return refusedOn("epoch milliseconds, which is `i64`", declared);
@@ -940,10 +963,38 @@ pub fn beforeIso(comptime decl: @Decl, comptime instant: string) {
         );
 }
 
+// ── step 4: literals, closed sets ───────────────────────────────────────────
+//
+// `#[literal(x)]` holds a `string`, `i32` or `bool` field to one value (the
+// argument's lexeme is read as the field's type); `#[oneOf("a,b,c")]` holds a
+// text field to a closed set, comma-joined because a decorator argument is one
+// raw lexeme (`language-gaps.md`).
+
+pub fn literal(comptime decl: @Decl, comptime expected: string | i32 | bool) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[literal] must annotate a field");
+}
+
+pub fn oneOf(comptime decl: @Decl, comptime options: string) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[oneOf] must annotate a field");
+    val problem = textArgProblem("oneOf", "options", options);
+    if (problem != "") decl.fail(problem);
+    val parts = options.split(",");
+    if (parts.filter({ o -> o == "" }).length > 0)
+        decl.fail(
+            "#[oneOf]: an option may not be empty - write the options comma-joined, as \"net,rod,trap\"",
+        );
+    if (parts.length < 2)
+        decl.fail(
+            "#[oneOf]: one option is a #[literal] - write two or more, comma-joined",
+        );
+}
+
 // Every marker `#[validated]` reads, in the order of this file — what
 // `#[schema]` asks of a field and what `test/refusal_test.bp` counts.
 pub fn markerNames() -> Array<string> {
-    return "notNull|notBlank|notEmpty|sizeBetween|minValue|maxValue|positive|positiveOrZero|email|pattern|pastDate|futureDate|constraint|minLength|maxLength|length|startsWith|endsWith|includes|uppercase|lowercase|emailHtml5|emailRfc5322|emailUnicode|uuid|uuidV|guid|url|urlHost|urlProtocol|httpUrl|hostname|e164|emoji|base64|base64url|hex|jwt|jwtAlg|nanoid|cuid|cuid2|ulid|ipv4|ipv6|mac|macDelimiter|cidrv4|cidrv6|creditCard|currencyCode|iban|hash|hashEnc|isoDate|isoTime|isoTimePrecision|isoDatetime|isoDatetimeOffset|isoDatetimeLocal|isoDatetimePrecision|isoDuration|gt|lt|negative|negativeOrZero|multipleOf|safeInt|float32|afterIso|beforeIso".split(
+    return "notNull|notBlank|notEmpty|sizeBetween|minValue|maxValue|positive|positiveOrZero|email|pattern|pastDate|futureDate|constraint|minLength|maxLength|length|startsWith|endsWith|includes|uppercase|lowercase|emailHtml5|emailRfc5322|emailUnicode|uuid|uuidV|guid|url|urlHost|urlProtocol|httpUrl|hostname|e164|emoji|base64|base64url|hex|jwt|jwtAlg|nanoid|cuid|cuid2|ulid|ipv4|ipv6|mac|macDelimiter|cidrv4|cidrv6|creditCard|currencyCode|iban|hash|hashEnc|isoDate|isoTime|isoTimePrecision|isoDatetime|isoDatetimeOffset|isoDatetimeLocal|isoDatetimePrecision|isoDuration|gt|lt|negative|negativeOrZero|multipleOf|safeInt|float32|afterIso|beforeIso|literal|oneOf".split(
         "|",
     );
 }
@@ -1007,40 +1058,128 @@ fn schemaIsBuiltin(t: string) -> bool {
         || t == "Json";
 }
 
-// The type one wrapper holds: `T` of `?T`, the item of a list; `""` when `t`
-// is not a wrapper.
+// A type that names another `#[schema]` declaration — a record or an enum,
+// decoded by calling `parse<ThatType>At` by name.
+fn schemaIsDeclared(t: string) -> bool {
+    return schemaIsName(t) && schemaIsBuiltin(t) == false;
+}
+
+// `t` cut at every `sep` outside `<…>`, `(…)` and `[…]`, each part trimmed:
+// the arms of a union, the items of a tuple, the arguments of a generic.
+fn splitTop(t: string, sep: string) -> Array<string> {
+    var parts: Array<string> = [];
+    var depth = 0;
+    var start = 0;
+    var i = 0;
+    val n = t.length();
+    while (i < n) {
+        val c = t.slice(i, i + 1);
+        if ("<([".indexOf(c) >= 0) depth = depth + 1;
+        if (">)]".indexOf(c) >= 0) depth = depth - 1;
+        if (depth == 0 && c == sep) {
+            parts.push(t.slice(start, i).trim());
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    parts.push(t.slice(start, n).trim());
+    return parts;
+}
+
+fn schemaIsUnion(t: string) -> bool {
+    if (t.startsWith("?")) return false;
+    return splitTop(t, "|").length > 1;
+}
+
+fn schemaIsTuple(t: string) -> bool {
+    return t.startsWith("#(") && t.endsWith(")");
+}
+
+fn schemaTupleItems(t: string) -> Array<string> {
+    return splitTop(t.slice(2, t.length() - 1), ",");
+}
+
+fn schemaIsDict(t: string) -> bool {
+    return t.startsWith("Dict<") && t.endsWith(">");
+}
+
+fn schemaIsSet(t: string) -> bool {
+    return t.startsWith("Set<") && t.endsWith(">");
+}
+
+// The arguments of `Dict<K, V>` / `Set<T>`.
+fn schemaArgs(t: string) -> Array<string> {
+    val open = t.indexOf("<");
+    return splitTop(t.slice(open + 1, t.length() - 1), ",");
+}
+
+// The type one wrapper holds: `T` of `?T`, the item of a list or a set; `""`
+// when `t` is not a wrapper.
 fn schemaInner(t: string) -> string {
     if (t.startsWith("?")) return t.slice(1, t.length());
     if (schemaIsList(t)) return schemaItemOf(t);
+    if (schemaIsSet(t)) return schemaArgs(t).slice(0, 1).join("");
     return "";
+}
+
+fn schemaDictKeySupported(k: string) -> bool {
+    return k == "string" || k == "i32" || schemaIsDeclared(k);
 }
 
 fn schemaSupported(t: string) -> bool {
     if (schemaIsBuiltin(t)) return true;
+    if (schemaIsUnion(t))
+        return splitTop(t, "|").filter(
+            { a -> schemaSupported(a) == false },
+        ).length
+            == 0;
+    if (schemaIsTuple(t)) {
+        val items = schemaTupleItems(t);
+        val labelled = items.filter(
+            { it -> splitTop(it, ":").length > 1 },
+        ).length;
+        return labelled == 0
+            && items.filter({ it -> schemaSupported(it) == false }).length == 0;
+    }
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        if (kv.length != 2) return false;
+        return schemaDictKeySupported(kv.slice(0, 1).join(""))
+            && schemaSupported(kv.slice(1, 2).join(""));
+    }
     val inner = schemaInner(t);
     if (inner != "") return schemaSupported(inner);
     return schemaIsName(t);
 }
 
 // A DECODER HANDED TO A COMBINATOR IS A FUNCTION OF THE APPLICATION'S MODULE.
-// `schemas.optionalOf` and `schemas.decodeArrayOf` take the inner decoder as a
-// value, and a library function cannot be that value from emitted code: a
-// namespace member is resolved where it is CALLED, not where it is passed
-// (`schemas.decodeString` as an argument is "unbound variable 'schemas'"). A
-// lambda that calls it works in a consumer and not in a module of this package,
-// where the namespace is the bare `import {schemas};` (`schemas is not defined`
-// on node, `decodeString/3 undefined` on erlang) - and this library's own tests
-// are such modules. So each wrapper level below the field's own gets one
-// emitted function, named after the record, the field and the depth, whose body
-// is the call: a plain function of the module the record is declared in.
-fn schemaHelperName(owner: string, field: string, depth: i32) -> string {
-    return "__decode" + owner + "_" + field + "_" + [depth].join("");
+// `schemas.optionalOf`, `decodeArrayOf`, `decodeSetOf` and `decodeDictOf` take
+// the inner decoder as a value, and a library function cannot be that value
+// from emitted code: a namespace member is resolved where it is CALLED, not
+// where it is passed (`schemas.decodeString` as an argument is "unbound
+// variable 'schemas'"). A lambda that calls it works in a consumer and not in
+// a module of this package, where the namespace is the bare `import
+// {schemas};` (`schemas is not defined` on node, `decodeString/3 undefined` on
+// erlang) - and this library's own tests are such modules. So each part of a
+// field's type below its own level gets one emitted function, named after the
+// record, the field and the part's place in the type (`0` the field, `0_1`
+// its second part, …), whose body is the call: a plain function of the module
+// the record is declared in. A tuple and a union get one for themselves too —
+// their decoder is straight-line code over their parts.
+fn schemaHelperName(owner: string, field: string, id: string) -> string {
+    return "__decode" + owner + "_" + field + "_" + id;
 }
 
-fn schemaRef(t: string, owner: string, field: string, depth: i32) -> string {
-    if (schemaIsName(t) && schemaIsBuiltin(t) == false)
-        return "parse" + t + "At";
-    return schemaHelperName(owner, field, depth);
+// The name of a function decoding `t` — what a combinator is handed.
+fn schemaRef(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return "parse" + t + "At";
+    return schemaHelperName(owner, field, id);
+}
+
+// The key of a `Dict` reaches its decoder as text (`Json.Str(key)`).
+fn schemaKeyRef(k: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(k)) return "parse" + k + "At";
+    return schemaHelperName(owner, field, id);
 }
 
 // The expression that decodes a value of type `t` read from `source` at `path`.
@@ -1050,7 +1189,7 @@ fn schemaCall(
     path: string,
     owner: string,
     field: string,
-    depth: i32,
+    id: string,
 ) -> string {
     val tail = "(" + source + ", " + path;
     if (t == "string") return "schemas.decodeString" + tail + ")";
@@ -1059,40 +1198,338 @@ fn schemaCall(
     if (t == "f64") return "schemas.decodeFloat" + tail + ")";
     if (t == "bool") return "schemas.decodeBool" + tail + ")";
     if (t == "Json") return "schemas.decodeJson" + tail + ")";
+    if (schemaIsUnion(t) || schemaIsTuple(t))
+        return schemaHelperName(owner, field, id) + tail + ")";
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        return "schemas.decodeDictOf"
+            + tail
+            + ", "
+            + schemaKeyRef(kv.slice(0, 1).join(""), owner, field, id + "_0")
+            + ", "
+            + schemaRef(kv.slice(1, 2).join(""), owner, field, id + "_1")
+            + ")";
+    }
     val inner = schemaInner(t);
     if (inner == "") return "parse" + t + "At" + tail + ")";
-    val ref = schemaRef(inner, owner, field, depth + 1);
+    val ref = schemaRef(inner, owner, field, id + "_0");
     if (t.startsWith("?"))
         return "schemas.optionalOf" + tail + ", " + ref + ")";
+    if (schemaIsSet(t)) return "schemas.decodeSetOf" + tail + ", " + ref + ")";
     return "schemas.decodeArrayOf" + tail + ", " + ref + ")";
 }
 
-// The emitted functions the wrapper levels of one field need, outermost first;
-// `""` for a field with no wrapper around a builtin or another wrapper.
+fn schemaResult(t: string) -> string {
+    return "(input: Json, at: string) -> @Result<"
+        + t
+        + ", ValidationReport> {\n";
+}
+
+// The function named by `schemaRef(t, …, id)`, and what it needs; `""` for a
+// declared type, which has its own.
+fn schemaNeed(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return "";
+    if (schemaIsUnion(t) || schemaIsTuple(t))
+        return schemaHelpers(t, owner, field, id);
+    return "fn "
+        + schemaHelperName(owner, field, id)
+        + schemaResult(t)
+        + "    return try "
+        + schemaCall(t, "input", "at", owner, field, id)
+        + ";\n}\n"
+        + schemaHelpers(t, owner, field, id);
+}
+
+// The emitted functions `schemaCall(t, …, id)` names, outermost first; `""`
+// for a builtin or a declared type.
 fn schemaHelpers(
     t: string,
     owner: string,
     field: string,
-    depth: i32,
+    id: string,
 ) -> string {
+    if (schemaIsUnion(t)) return schemaUnionFn(t, owner, field, id);
+    if (schemaIsTuple(t)) return schemaTupleFn(t, owner, field, id);
+    if (schemaIsDict(t)) {
+        val kv = schemaArgs(t);
+        val k = kv.slice(0, 1).join("");
+        val keyCall = if (k == "i32")
+            "schemas.decodeIntKey(input, at)"
+        else
+            "schemas.decodeString(input, at)";
+        val keyFn = if (schemaIsDeclared(k))
+            ""
+        else
+            "fn "
+                + schemaHelperName(owner, field, id + "_0")
+                + schemaResult(k)
+                + "    return try "
+                + keyCall
+                + ";\n}\n";
+        return keyFn
+            + schemaNeed(kv.slice(1, 2).join(""), owner, field, id + "_1");
+    }
     val inner = schemaInner(t);
     if (inner == "") return "";
-    if (schemaIsName(inner) && schemaIsBuiltin(inner) == false) return "";
+    return schemaNeed(inner, owner, field, id + "_0");
+}
+
+// A union: the arms in the order the type writes them, the first that accepts
+// is the value; none → ONE `invalidUnion` naming each arm's first violation.
+// Absent is `required` unless an arm takes it (`?T`, `Json`).
+fn schemaUnionFn(
+    t: string,
+    owner: string,
+    field: string,
+    id: string,
+) -> string {
+    val arms = splitTop(t, "|");
+    val nullable = arms.filter({ a -> a.startsWith("?") || a == "Json" }).length
+        > 0;
+    var body: Array<string> = [];
+    var parts: Array<string> = [];
+    var deps: Array<string> = [];
+    if (nullable == false)
+        body.push(
+            "    if (schemas.isNull(input)) { throw schemas.required(at); }",
+        );
+    var j = 0;
+    while (j < arms.length) {
+        val a = arms.slice(j, j + 1).join("");
+        val armId = id + "_" + [j].join("");
+        val v = "__a" + [j].join("");
+        body.push(
+            "    val "
+                + v
+                + " = "
+                + schemaCall(a, "input", "at", owner, field, armId)
+                + ";",
+        );
+        body.push(
+            "    if (schemas.violationsOf("
+                + v
+                + ").length == 0) return try "
+                + v
+                + ";",
+        );
+        parts.push("schemas.violationsOf(" + v + ")");
+        deps.push(schemaHelpers(a, owner, field, armId));
+        j = j + 1;
+    }
     return "fn "
-        + schemaHelperName(owner, field, depth + 1)
-        + "(input: Json, at: string) -> @Result<"
-        + inner
-        + ", ValidationReport> {\n    return try "
-        + schemaCall(inner, "input", "at", owner, field, depth + 1)
-        + ";\n}\n"
-        + schemaHelpers(inner, owner, field, depth + 1);
+        + schemaHelperName(owner, field, id)
+        + schemaResult(t)
+        + body.join("\n")
+        + "\n    throw schemas.noArm(at, input, ["
+        + parts.join(", ")
+        + "]);\n}\n"
+        + deps.join("");
+}
+
+// A tuple: a list of exactly its length, each item at `at[i]`, every item's
+// violations reported, the tuple built only when there are none.
+fn schemaTupleFn(
+    t: string,
+    owner: string,
+    field: string,
+    id: string,
+) -> string {
+    val items = schemaTupleItems(t);
+    var decoders: Array<string> = [];
+    var gathers: Array<string> = [];
+    var values: Array<string> = [];
+    var deps: Array<string> = [];
+    var i = 0;
+    while (i < items.length) {
+        val it = items.slice(i, i + 1).join("");
+        val n = [i].join("");
+        val itemId = id + "_" + n;
+        decoders.push(
+            "    val __t"
+                + n
+                + " = "
+                + schemaCall(
+                    it,
+                    "schemas.itemOf(__items, " + n + ")",
+                    "schemas.indexPath(at, " + n + ")",
+                    owner,
+                    field,
+                    itemId,
+                )
+                + ";",
+        );
+        gathers.push(
+            "    __vs = __vs.append(schemas.violationsOf(__t" + n + "));",
+        );
+        values.push("try __t" + n);
+        deps.push(schemaHelpers(it, owner, field, itemId));
+        i = i + 1;
+    }
+    return "fn "
+        + schemaHelperName(owner, field, id)
+        + schemaResult(t)
+        + "    val __items = try schemas.tupleItems(input, at, "
+        + [items.length].join("")
+        + ");\n"
+        + decoders.join("\n")
+        + "\n    var __vs: Array<Violation> = [];\n"
+        + gathers.join("\n")
+        + "\n    if (__vs.length > 0) { throw ValidationReport(violations: __vs); }\n"
+        + "    return #("
+        + values.join(", ")
+        + ");\n}\n"
+        + deps.join("");
 }
 
 fn schemaIsMarker(name: string) -> bool {
     return markerNames().indexOf(name) >= 0;
 }
 
+// An argument's lexeme without its quotes: `"status"` → `status`.
+fn unquoted(l: string) -> string {
+    if (l.startsWith("\"") && l.endsWith("\"") && l.length() >= 2)
+        return l.slice(1, l.length() - 1);
+    return l;
+}
+
+// What `#[schema]` emits for every declaration, under its name.
+fn schemaCommon(name: string) -> string {
+    return "pub fn parse"
+        + name
+        + "(input: Json) -> @Result<"
+        + name
+        + ", ValidationReport> {\n    return try parse"
+        + name
+        + "At(input, \"\");\n}\n"
+        + "pub fn decode"
+        + name
+        + "(text: string) -> @Result<"
+        + name
+        + ", ValidationReport> {\n    return try schemas.decodeText(text, parse"
+        + name
+        + "At);\n}\n"
+        + "pub fn schemaOf"
+        + name
+        + "() -> Schema<"
+        + name
+        + "> {\n    return schemas.of(parse"
+        + name
+        + "At);\n}";
+}
+
+// `#[schema]` on an enum. Payload-less: the variant's NAME is the wire value
+// (`"Tuna"`), anything else `invalidValue` with the options. With
+// `#[tag("status")]`: an object whose member `status` names the variant, and
+// whose other members are the variant's payload — a `#[schema]` record named
+// after the enum and the variant, reached by `parse<Enum><Variant>At` and held
+// as the variant's one field `value` (`Success(value: ReplySuccess)`). Not the
+// variant's own name: a variant's constructor is a name of the module, and a
+// record `Success` beside `Reply.Success` is constructed as the variant.
+//
+// LANGUAGE GAP: `Decl.variants` carries a variant's name and not its payload
+// fields or its annotations (`language-gaps.md`), so neither form can tell from here
+// whether a variant has a payload, nor read a marker on it: a payload-less
+// enum whose variant carries fields, and a tagged one whose variant has no
+// payload record, fail where the emitted code names them.
+fn schemaEnum(name: string, variants: Array<string>, tag: string) -> string {
+    val options = "[" + variants.map({ v -> "\"" + v + "\"" }).join(", ") + "]";
+    val head = "pub fn parse" + name + "At" + schemaResult(name);
+    val opts = "pub fn optionsOf"
+        + name
+        + "() -> Array<string> {\n    return "
+        + options
+        + ";\n}\n";
+    if (tag == "") {
+        val arms = variants
+            .slice(0, variants.length - 1)
+            .map({ v ->
+                "    if (__name == \""
+                    + v
+                    + "\") return "
+                    + name
+                    + "."
+                    + v
+                    + ";";
+            });
+        return head
+            + "    val __name = try schemas.variantName(input, at, "
+            + options
+            + ");\n"
+            + arms.join("\n")
+            + "\n    return "
+            + name
+            + "."
+            + variants.slice(variants.length - 1, variants.length).join("")
+            + ";\n}\n"
+            + opts;
+    }
+    val dispatch = variants
+        .slice(0, variants.length - 1)
+        .map({ v ->
+            "    if (__tag == \""
+                + v
+                + "\") return try __decode"
+                + name
+                + "_"
+                + v
+                + "(__rest, at);";
+        });
+    val payloads = variants.map({ v ->
+        "fn __decode"
+            + name
+            + "_"
+            + v
+            + schemaResult(name)
+            + "    val __v = try parse"
+            + name
+            + v
+            + "At(input, at);\n    return "
+            + name
+            + "."
+            + v
+            + "(value: __v);\n}\n";
+    });
+    return head
+        + "    val __shape = schemas.objectProblems(input, at);\n"
+        + "    if (__shape.length > 0) { throw ValidationReport(violations: __shape); }\n"
+        + "    val __tag = try schemas.variantName(input.field(\""
+        + tag
+        + "\") ?? Json.Null, schemas.memberPath(at, \""
+        + tag
+        + "\"), "
+        + options
+        + ");\n"
+        + "    val __rest = schemas.without(input, \""
+        + tag
+        + "\");\n"
+        + dispatch.join("\n")
+        + "\n    return try __decode"
+        + name
+        + "_"
+        + variants.slice(variants.length - 1, variants.length).join("")
+        + "(__rest, at);\n}\n"
+        + payloads.join("")
+        + opts;
+}
+
 pub fn schema(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Type) decl.fail("#[schema] must annotate a type");
+    val tags = decl.annotations.filter({ a -> a.name == "tag" });
+    val tag = if (tags.length > 0)
+        unquoted(tags.slice(0, 1).map({ a -> a.args.join("") }).join(""))
+    else
+        "";
+    val isEnum = decl.variants.length > 0;
+    if (isEnum)
+        @emit(
+            schemaEnum(decl.name, decl.variants, tag) + schemaCommon(decl.name),
+        );
+    if (isEnum == false && tag != "")
+        decl.fail(
+            "#[tag] on `"
+                + decl.name
+                + "`: a tag names the variant of an enum, and this type is a record",
+        );
     var decoders: Array<string> = [];
     var gathers: Array<string> = [];
     var args: Array<string> = [];
@@ -1105,11 +1542,11 @@ pub fn schema(comptime decl: @Decl) {
         val path = "schemas.memberPath(at, \"" + f.name + "\")";
         val supported = schemaSupported(f.typeName);
         val call = if (supported)
-            schemaCall(f.typeName, source, path, decl.name, f.name, 0)
+            schemaCall(f.typeName, source, path, decl.name, f.name, "0")
         else
             "0";
         if (supported)
-            helpers.push(schemaHelpers(f.typeName, decl.name, f.name, 0));
+            helpers.push(schemaHelpers(f.typeName, decl.name, f.name, "0"));
         if (supported == false)
             problem = "#[schema] on `"
                 + decl.name
@@ -1117,7 +1554,11 @@ pub fn schema(comptime decl: @Decl) {
                 + f.name
                 + "` is `"
                 + f.typeName
-                + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, Array<T> and other #[schema] records";
+                + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, Array<T>, Set<T>, Dict<K, V> (K string, i32 or a #[schema] enum), tuples, unions and other #[schema] types";
+        val exhaustive = f.annotations.filter(
+            { a -> a.name == "exhaustive" },
+        ).length
+            > 0;
         f.annotations.forEach({ a ->
             if (schemaIsMarker(a.name)) marked = true;
         });
@@ -1125,6 +1566,31 @@ pub fn schema(comptime decl: @Decl) {
         gathers.push(
             "    __vs = __vs.append(schemas.violationsOf(__r_" + f.name + "));",
         );
+        if (exhaustive) {
+            val kv = if (schemaIsDict(f.typeName))
+                schemaArgs(f.typeName)
+            else
+                [""];
+            val k = kv.slice(0, 1).join("");
+            if (schemaIsDeclared(k))
+                gathers.push(
+                    "    __vs = __vs.append(schemas.absentKeys("
+                        + source
+                        + ", optionsOf"
+                        + k
+                        + "(), "
+                        + path
+                        + "));",
+                )
+            else
+                problem = "#[exhaustive] on field `"
+                    + f.name
+                    + "` of `"
+                    + decl.name
+                    + "`: it applies to `Dict<K, V>` whose key `K` is a #[schema] enum, and this field is `"
+                    + f.typeName
+                    + "`";
+        }
         args.push(f.name + ": try __r_" + f.name);
         known.push("\"" + f.name + "\"");
     });
@@ -1138,7 +1604,9 @@ pub fn schema(comptime decl: @Decl) {
         "    val __checked = schemas.under(at, __v.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n"
     else
         "";
-    @emit(
+    val recordText = if (isEnum)
+        ""
+    else
         "pub fn parse"
             + decl.name
             + "At(input: Json, at: string) -> @Result<"
@@ -1161,35 +1629,9 @@ pub fn schema(comptime decl: @Decl) {
             + args.join(", ")
             + ");\n"
             + checks
-            + "    return __v;\n}",
-    );
-    @emit(
-        "pub fn parse"
-            + decl.name
-            + "(input: Json) -> @Result<"
-            + decl.name
-            + ", ValidationReport> {\n    return try parse"
-            + decl.name
-            + "At(input, \"\");\n}",
-    );
-    @emit(
-        "pub fn decode"
-            + decl.name
-            + "(text: string) -> @Result<"
-            + decl.name
-            + ", ValidationReport> {\n    return try schemas.decodeText(text, parse"
-            + decl.name
-            + "At);\n}",
-    );
-    @emit(
-        "pub fn schemaOf"
-            + decl.name
-            + "() -> Schema<"
-            + decl.name
-            + "> {\n    return schemas.of(parse"
-            + decl.name
-            + "At);\n}",
-    );
+            + "    return __v;\n}\n"
+            + schemaCommon(decl.name);
+    if (recordText != "") @emit(recordText);
     if (problem != "") decl.fail(problem);
     if (marked && validated == false)
         decl.fail(
@@ -1197,7 +1639,19 @@ pub fn schema(comptime decl: @Decl) {
                 + decl.name
                 + "`: its fields carry constraint markers and the type is not #[validated], so nothing would run them - add #[validated]",
         );
-    if (decl.kind != DeclKind.Type) decl.fail("#[schema] must annotate a type");
-    if (decl.variants.length > 0)
-        decl.fail("#[schema] must annotate a type with fields, not an enum");
+}
+
+// `#[tag("status")]` beside `#[schema]` on an enum: the member that names the
+// variant. `#[schema]` reads it.
+pub fn tag(comptime decl: @Decl, comptime member: string) {
+    if (decl.kind != DeclKind.Type) decl.fail("#[tag] must annotate a type");
+    val problem = textArgProblem("tag", "member name", member);
+    if (problem != "") decl.fail(problem);
+}
+
+// `#[exhaustive]` on a `Dict<K, V>` field whose key is a `#[schema]` enum:
+// every variant must be a key. `#[schema]` reads it.
+pub fn exhaustive(comptime decl: @Decl) {
+    if (decl.kind != DeclKind.Field)
+        decl.fail("#[exhaustive] must annotate a field");
 }

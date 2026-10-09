@@ -98,19 +98,19 @@ test "validation: a field type #[schema] does not decode is refused, naming fiel
         "schema_unsupported_field",
         [
             SCHEMA_IMPORTS,
-            """import {collections.Dict} from "std";
+            """import {collections.Queue} from "std";
 
 #[schema]
 pub type Bad(
     name: string,
-    scores: Dict<string, i32>,
+    scores: Queue<i32>,
 )
 """,
         ].join(""),
     );
     assert refusedWith(
         out,
-        "#[schema] on `Bad`: field `scores` is `Dict<string, i32>`, which this decorator does not decode",
+        "#[schema] on `Bad`: field `scores` is `Queue<i32>`, which this decorator does not decode",
         "6:3",
     );
 }
@@ -130,6 +130,48 @@ pub type Good(
         ].join(""),
     );
     assert out.startsWith("0\n");
+}
+
+test "validation: #[exhaustive] on a dict whose key is not a #[schema] enum is refused" {
+    val out = checked(
+        "schema_exhaustive_text_key",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.exhaustive} from "validation";
+import {collections.Dict} from "std";
+
+#[schema]
+pub type Bad(
+    #[exhaustive] labels: Dict<string, string>,
+)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[exhaustive] on field `labels` of `Bad`: it applies to `Dict<K, V>` whose key `K` is a #[schema] enum",
+        "7:3",
+    );
+}
+
+test "validation: #[tag] on a record is refused" {
+    val out = checked(
+        "schema_tag_on_record",
+        [
+            SCHEMA_IMPORTS,
+            """import {decorators.tag} from "validation";
+
+#[schema]
+#[tag("kind")]
+pub type Bad(name: string)
+""",
+        ].join(""),
+    );
+    assert refusedWith(
+        out,
+        "#[tag] on `Bad`: a tag names the variant of an enum, and this type is a record",
+        "6:3",
+    );
 }
 
 // ── every marker on a field type it cannot check ────────────────────────────
@@ -212,6 +254,8 @@ fn markerRows() -> Array<#(string, string, string)> {
         #("float32", "", "i32"),
         #("afterIso", "(\"2020-01-01T00:00:00Z\")", "i32"),
         #("beforeIso", "(\"2020-01-01T00:00:00Z\")", "i32"),
+        #("literal", "(\"kg\")", "f64"),
+        #("oneOf", "(\"a,b\")", "i32"),
     ];
 }
 
@@ -316,6 +360,9 @@ fn argumentRows() -> Array<#(string, string, string)> {
         #("multipleOf", "(1e-3)", "f64"),
         #("afterIso", "(\"2020-01-01\")", "i64"),
         #("minLength", "(1)", "?Array<string>"),
+        #("oneOf", "(\"a\")", "string"),
+        #("oneOf", "(\"a,,b\")", "string"),
+        #("literal", "(1.5)", "i32"),
     ];
 }
 
@@ -336,6 +383,9 @@ fn argumentMessages() -> Array<string> {
         "#[multipleOf] on field `x` of `Bad`: write the step as a decimal",
         "#[afterIso]: the bound is an ISO datetime with its zone",
         "#[minLength] on field `x` of `Bad`: a marker on an optional field applies to",
+        "#[oneOf]: one option is a #[literal]",
+        "#[oneOf]: an option may not be empty",
+        "#[literal] on field `x` of `Bad`: the literal `1.5` is not an `i32`",
     ];
 }
 

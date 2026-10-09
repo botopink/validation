@@ -31,7 +31,7 @@
 import {report.Violation, report.ValidationReport, report.violation};
 import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate};
 import {path.key, path.index};
-import {json, json.Json} from "std";
+import {json, json.Json, collections.Dict, collections.Set} from "std";
 
 pub type Schema<T>(
     run: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
@@ -183,6 +183,12 @@ fn refused(
 
 fn missing(at: string) -> ValidationReport {
     return refused(at, "required", "", noArgs());
+}
+
+// `required` at `at` — what an emitted decoder throws for an absent value it
+// tests itself (a union with no optional arm).
+pub fn required(at: string) -> ValidationReport {
+    return missing(at);
 }
 
 fn wrongType(at: string, expected: string, input: Json) -> ValidationReport {
@@ -405,4 +411,192 @@ pub fn decodeText<T>(
         throw refused("", "invalidJson", "", [arg("reason", reason)]);
     val document = try read catch Json.Null;
     return try run(document, "");
+}
+
+// ── step 4: enums, unions, tuples, dicts, sets ──────────────────────────────
+
+// `path.index`, through this module's namespace: the path of a list's item.
+pub fn indexPath(at: string, i: i32) -> string {
+    return index(at, i);
+}
+
+// The variant a text names, for an enum decoded by name: absent is
+// `required`, anything but text `invalidType`, a text no variant has
+// `invalidValue` with the options in declaration order.
+pub fn variantName(
+    input: Json,
+    at: string,
+    options: Array<string>,
+) -> @Result<string, ValidationReport> {
+    val k = kindOf(input);
+    if (k == "null") throw missing(at);
+    if (k != "text") throw wrongType(at, "text", input);
+    val name = textOf(input);
+    if (options.indexOf(name) < 0)
+        throw refused(
+            at,
+            "invalidValue",
+            name,
+            [arg("options", options.join(", "))],
+        );
+    return name;
+}
+
+// A union none of whose arms accepted the value: ONE `invalidUnion`, its
+// message naming each arm's first violation in the order the type writes the
+// arms.
+pub fn noArm(
+    at: string,
+    input: Json,
+    arms: Array<Array<Violation>>,
+) -> ValidationReport {
+    val firsts = arms.map(
+        { vs -> vs.map({ v -> v.message }).slice(0, 1).join("") },
+    );
+    return refused(
+        at,
+        "invalidUnion",
+        shown(input),
+        [arg("arms", firsts.join("; "))],
+    );
+}
+
+// The items of a tuple: a list of exactly `n`. Absent is `required`; anything
+// else — another kind, another length — is `invalidType`.
+pub fn tupleItems(
+    input: Json,
+    at: string,
+    n: i32,
+) -> @Result<Array<Json>, ValidationReport> {
+    val k = kindOf(input);
+    val expected = ["a list of ", [n].join(""), " items"].join("");
+    if (k == "null") throw missing(at);
+    if (k != "a list") throw wrongType(at, expected, input);
+    val items = input.items();
+    if (items.length != n) throw wrongType(at, expected, input);
+    return items;
+}
+
+pub fn itemOf(items: Array<Json>, i: i32) -> Json {
+    return items.at(i) ?? Json.Null;
+}
+
+// `Dict<K, V>`: a JSON object, each member's key decoded by `key` (handed the
+// key as text) and its value by `value`, both at `at.<key>`; every member's
+// violations reported, the dict answered only when there are none. Member
+// order is the document's.
+pub fn decodeDictOf<K, V>(
+    input: Json,
+    at: string,
+    keyOf: fn(input: Json, at: string) -> @Result<K, ValidationReport>,
+    valueOf: fn(input: Json, at: string) -> @Result<V, ValidationReport>,
+) -> @Result<Dict<K, V>, ValidationReport> {
+    val k = kindOf(input);
+    if (k == "null") throw missing(at);
+    if (k != "an object") throw wrongType(at, "an object", input);
+    val members = input.members();
+    var out: Array<#(K, V)> = [];
+    var found: Array<Violation> = [];
+    var i = 0;
+    while (i < members.length) {
+        val m = members.at(i) ?? #("", Json.Null);
+        val where = key(at, m[0]);
+        val rk = keyOf(Json.Str(m[0]), where);
+        val rv = valueOf(m[1], where);
+        found = found.append(violationsOf(rk)).append(violationsOf(rv));
+        out = case rk {
+            Ok(kv) -> case rv {
+                Ok(vv) -> out.append([#(kv, vv)]);
+                Error(_) -> out;
+            };
+            Error(_) -> out;
+        };
+        i = i + 1;
+    }
+    if (found.length > 0) throw ValidationReport(violations: found);
+    return Dict.ofEntries(out);
+}
+
+// `#[exhaustive]`: one `required` per option the object does not carry, at
+// `at.<option>`, in the options' order.
+pub fn absentKeys(
+    input: Json,
+    options: Array<string>,
+    at: string,
+) -> Array<Violation> {
+    val present = input.members().map({ m -> m[0] });
+    val gone = options.filter({ o -> present.indexOf(o) < 0 });
+    return gone
+        .map({ o -> missing(key(at, o)).violations })
+        .fold(noViolations(), { acc, vs -> acc.append(vs) });
+}
+
+fn noViolations() -> Array<Violation> {
+    val none: Array<Violation> = [];
+    return none;
+}
+
+// `Set<T>`: a JSON list whose items are decoded as a list's are; an item equal
+// to an earlier one is `duplicate` at its own index — a set does not fold a
+// repeated item away in silence.
+pub fn decodeSetOf<T>(
+    input: Json,
+    at: string,
+    item: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
+) -> @Result<Set<T>, ValidationReport> {
+    val k = kindOf(input);
+    if (k == "null") throw missing(at);
+    if (k != "a list") throw wrongType(at, "a list", input);
+    val items = input.items();
+    var out: Array<T> = [];
+    var found: Array<Violation> = [];
+    var i = 0;
+    while (i < items.length) {
+        val where = index(at, i);
+        val r = item(items.at(i) ?? Json.Null, where);
+        found = case r {
+            Ok(v) -> found.append(
+                repeated(out, v, where, items.at(i) ?? Json.Null),
+            );
+            Error(report) -> found.append(report.violations);
+        };
+        out = case r {
+            Ok(v) -> out.append([v]);
+            Error(_) -> out;
+        };
+        i = i + 1;
+    }
+    if (found.length > 0) throw ValidationReport(violations: found);
+    return Set.fromList(out);
+}
+
+fn repeated<T>(
+    seen: Array<T>,
+    v: T,
+    at: string,
+    input: Json,
+) -> Array<Violation> {
+    if (seen.indexOf(v) < 0) return noViolations();
+    return refused(at, "duplicate", shown(input), noArgs()).violations;
+}
+
+// A dict key as an `i32`: the key is text, read by the integer grammar.
+pub fn decodeIntKey(input: Json, at: string) -> @Result<i32, ValidationReport> {
+    val text = textOf(input);
+    val digits = text.parseInt();
+    val ok = case digits {
+        Ok(_) -> true;
+        Error(_) -> false;
+    };
+    if (ok == false) throw wrongType(at, "a whole number", input);
+    val n = try text.parseFloat() catch 0.0;
+    val fits = n <= 2147483647.0 && n >= -2147483648.0;
+    if (fits == false) throw wrongType(at, "a whole number", input);
+    return wholeI32(n);
+}
+
+// `input` without its member `name` — the payload of a tagged enum, whose tag
+// the enum's decoder has already read.
+pub fn without(input: Json, name: string) -> Json {
+    return Json.Obj(input.members().filter({ m -> m[0] != name }));
 }
