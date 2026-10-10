@@ -11,7 +11,8 @@ import {derived};
 import {report.ValidationReport, report.Violation, table, table.constraintTableJson};
 import {constraints.vEmail, constraints.vIsoDatetime, constraints.vIsoDate, constraints.vIsoDuration, constraints.vIpv4, constraints.vIpv6};
 import {constraints.vUuid, constraints.vGuid, constraints.vUrl, constraints.vBase64, constraints.vMinLength};
-import {json, json.Json} from "std";
+import {json_schema_example_test.User, json_schema_example_test.Ping};
+import {io.process, io.fs, path, json, json.Json} from "std";
 
 fn sameJson(a: Json, b: Json) -> bool {
     return case a {
@@ -164,4 +165,57 @@ test "validation: another type is a $def, and draft-07 calls them definitions" {
     val draft7 = table.toDraft07(doc);
     assert draft7.contains("\"definitions\":{\"Writer\":");
     assert draft7.contains("\"$ref\":\"#/definitions/Writer\"");
+}
+
+// ── the meta-schema check (decision 399) ────────────────────────────────────
+
+// Which backend is running: the meta-schema check is `node`'s, so the erlang
+// row does not run it (decision 399: commonJS only); the sixteen literals
+// above stay on both. Private, as std's tests keep theirs.
+#[@External.Node("""'commonJS'""")]
+#[@External.Erlang("""<<"erlang">>""")]
+declare fn hostTarget() -> string;
+
+// `ok`, or the vendored validator's error list, for one document: Ajv's
+// standalone 2020 build under `test/tools/`, a test tool and nothing more.
+fn metaErrors(doc: string) -> string {
+    val tool = path.join([process.cwd(), "test", "tools", "check-schema.js"]);
+    return case process.run("node", [tool, doc]) {
+        Ok(e) -> if (e.status == 0) "ok" else e.stdout;
+        Error(why) -> ["node could not run: ", why].join("");
+    };
+}
+
+// Every test that emits a document asserts `metaChecked(doc) == "ok"` on it.
+pub fn metaChecked(doc: string) -> string {
+    if (hostTarget() == "erlang") return "ok";
+    return metaErrors(doc);
+}
+
+test "validation: the meta-schema check rejects a document that is not a schema" {
+    if (hostTarget() != "erlang") {
+        assert metaErrors(
+            """{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "strin"}""",
+        )
+            != "ok";
+        assert metaErrors(
+            """{"$schema": "https://json-schema.org/draft/2020-12/schema", "required": "name"}""",
+        )
+            != "ok";
+        assert metaErrors("not json") != "ok";
+        assert metaErrors(
+            """{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}""",
+        )
+            == "ok";
+    }
+}
+
+test "validation: every emitted JSON Schema document is a 2020-12 schema (399)" {
+    assert metaChecked(Person.jsonSchema()) == "ok";
+    assert metaChecked(Friend.jsonSchema()) == "ok";
+    assert metaChecked(Formats.jsonSchema()) == "ok";
+    assert metaChecked(Post.jsonSchema()) == "ok";
+    assert metaChecked(Writer.jsonSchema()) == "ok";
+    assert metaChecked(User.jsonSchema()) == "ok";
+    assert metaChecked(Ping.jsonSchema()) == "ok";
 }

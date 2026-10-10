@@ -15,6 +15,7 @@ import {decorators.orElse, decorators.orElseOf, decorators.fallback, decorators.
 import {constraints.vNotBlank, constraints.vMinValueI32, constraints.vMaxValueI32};
 import {table.constraintTableJson};
 import {derived};
+import {json_schema_test.metaChecked};
 import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 import {json, json.Json, collections.Set, collections.Dict, querystring} from "std";
@@ -640,6 +641,7 @@ test "validation: an enum default and fallback are its variants, by reference" {
     assert rig.bait == Bait.Fly;
     assert rig.spare == Bait.Worm;
     assert Rig.jsonSchema().contains("\"default\":\"Fly\"");
+    assert metaChecked(Rig.jsonSchema()) == "ok";
 }
 
 // ── step 12: a transparent type ─────────────────────────────────────────────
@@ -664,6 +666,8 @@ test "validation: a transparent type decodes, checks and encodes as its one fiel
     assert derived.jsonText(back) == "{\"owner\":\"a@b.c\",\"guests\":[]}";
     val single = try Email.decode("\"x@y.z\"");
     assert single.value == "x@y.z";
+    assert metaChecked(Email.jsonSchema()) == "ok";
+    assert metaChecked(Invitation.jsonSchema()) == "ok";
     assert Email.jsonSchema()
         == "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"string\",\"format\":\"email\"}";
 }

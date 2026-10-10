@@ -92,6 +92,7 @@ validation/
                       transform_and_codec_example ·
                       platform · refusal · report · schema · schema_parity · signup_schema_example ·
                       spi · table   (suite `validation:`)
+    └── tools/        the meta-schema check's vendored validator — tests only (see § Testing)
 ```
 
 `botopink.json`'s `files` order is a dependency order: a module is listed before
@@ -419,6 +420,22 @@ meta checkout's `repository/botopink-lang/zig-out/bin/botopink`, else a
 `botopink-lang/repository/validation` CI layout's `botopink-lang/zig-out/bin/botopink`)
 and asserts status, message and location. The fixture's `botopink.json` declares
 `validation` by `path` — this package's directory — as any consumer must (decision 242).
+
+**The meta-schema check** (decision 399). `test/tools/` vendors Ajv's standalone
+2020-12 build — `ajv2020.min.js`, Ajv 8.17.1 (MIT; `ajv-dist@8.17.1`, published
+2024-07-12, tarball `dist/ajv2020.min.js`), sha256
+`d2f97a24636c44135e1ffffeea29656c06a1c1f71b315e958c88d0e8126c2100`, its licence in
+`ajv.LICENSE` — and `check-schema.js`, the entry that validates one document
+(its argument) against the 2020-12 meta-schema (`validateSchema`, formats
+unchecked) and prints `ok` or one line per error. `test/json_schema_test.bp`
+runs it through `io.process.run("node", …)` for every document the suite
+emits (`metaChecked(doc) == "ok"`, which `schema_test.bp` uses too); the erlang
+row skips the check (commonJS only, like the `hostTarget()` branch that says
+so) and keeps the sixteen literals against ZOD_DOCUMENTATION.md § 8 on both
+targets. No network and nothing installed at test time. The validator is a test
+tool only: never in `src/`, never in `botopink.json`'s `files`, never imported by
+the library or a consumer. Updating it means replacing the file, this version and
+this hash together.
 
 Tests import the package's modules by their path inside the braces
 (`import {report.Violation};`, decision 206), as any package's tests do. Every test that depends on message templates sets its
