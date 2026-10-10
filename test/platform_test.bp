@@ -198,11 +198,11 @@ fn emittedName(n: string) -> string {
 // A decorator body calls a bodied function of its own module, takes a
 // parameter's default, and emits code that names a module through its
 // namespace.
-pub fn maker(comptime decl: @Decl, comptime suffix: string = "X") {
+pub fn maker(comptime decl: @Decl, comptime suffix: @Expr<string> = "X") {
     @emit(
         "pub fn "
             + emittedName(decl.name)
-            + suffix
+            + suffix.value
             + "() -> i32 { return constraints.vNotBlank(\"f\", \"\").length; }",
     );
 }

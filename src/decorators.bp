@@ -74,7 +74,7 @@ pub val transparent: Form = Form.Transparent;
 // …` does not parse), so `form` is a run-time parameter — decision 280 (0)
 // writes every decorator parameter `comptime`; the body reads the argument's
 // lexeme (`transparent`) from `decl.annotations`.
-pub fn validated(comptime decl: @Decl, comptime form: ?Form = null) {
+pub fn validated(comptime decl: @Decl, comptime form: @Expr<?Form> = null) {
     var calls: Array<string> = [];
     var rows: Array<string> = [];
     var problem = "";
@@ -413,23 +413,27 @@ pub fn notEmpty(comptime decl: @Decl) {
         decl.fail("#[notEmpty] must annotate a field");
 }
 
-pub fn sizeBetween(comptime decl: @Decl, comptime min: i32, comptime max: i32) {
+pub fn sizeBetween(
+    comptime decl: @Decl,
+    comptime min: @Expr<i32>,
+    comptime max: @Expr<i32>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[sizeBetween] must annotate a field");
-    if (min < 0)
+    if (min.value < 0)
         decl.fail("#[sizeBetween]: the lower bound may not be negative");
-    if (min > max)
+    if (min.value > max.value)
         decl.fail(
             "#[sizeBetween]: the lower bound is above the upper bound, so the constraint could never hold",
         );
 }
 
-pub fn minValue(comptime decl: @Decl, comptime min: i32) {
+pub fn minValue(comptime decl: @Decl, comptime min: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[minValue] must annotate a field");
 }
 
-pub fn maxValue(comptime decl: @Decl, comptime max: i32) {
+pub fn maxValue(comptime decl: @Decl, comptime max: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[maxValue] must annotate a field");
 }
@@ -453,15 +457,16 @@ pub fn email(comptime decl: @Decl) {
 // table's blob separates records with `;` and fields with `|`. A pattern
 // carrying either would make the table unreadable, so it is refused here
 // rather than escaped there — the grammar has no escape and needs none.
-pub fn pattern(comptime decl: @Decl, comptime regex: string) {
+pub fn pattern(comptime decl: @Decl, comptime regex: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[pattern] must annotate a field");
-    if (regex == "") decl.fail("#[pattern]: the pattern may not be empty");
-    if (regex.indexOf(";") >= 0 || regex.indexOf("|") >= 0)
+    if (regex.value == "")
+        decl.fail("#[pattern]: the pattern may not be empty");
+    if (regex.value.indexOf(";") >= 0 || regex.value.indexOf("|") >= 0)
         decl.fail(
             "#[pattern]: a pattern may not contain ';' or '|' - those are the constraint table's record and field separators",
         );
-    if (regex.indexOf("\"") >= 0)
+    if (regex.value.indexOf("\"") >= 0)
         decl.fail(
             "#[pattern]: a pattern may not contain a double quote - it is the argument's own delimiter in the reflected lexeme",
         );
@@ -482,15 +487,15 @@ pub fn futureDate(comptime decl: @Decl) {
 // load, and a decorator body has no whole-program view — so an unregistered
 // name is a violation at the first validation call, coded `unknownConstraint`,
 // and never a pass.
-pub fn constraint(comptime decl: @Decl, comptime name: string) {
+pub fn constraint(comptime decl: @Decl, comptime name: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[constraint] must annotate a field");
-    if (name == "") decl.fail("#[constraint]: the name may not be empty");
-    if (name.indexOf(";") >= 0 || name.indexOf("|") >= 0)
+    if (name.value == "") decl.fail("#[constraint]: the name may not be empty");
+    if (name.value.indexOf(";") >= 0 || name.value.indexOf("|") >= 0)
         decl.fail(
             "#[constraint]: a name may not contain ';' or '|' - those are the constraint table's record and field separators",
         );
-    if (name.indexOf("\"") >= 0)
+    if (name.value.indexOf("\"") >= 0)
         decl.fail(
             "#[constraint]: a name may not contain a double quote - it is the argument's own delimiter in the reflected lexeme",
         );
@@ -759,45 +764,47 @@ fn textArgProblem(marker: string, what: string, text: string) -> string {
     return "";
 }
 
-pub fn minLength(comptime decl: @Decl, comptime min: i32) {
+pub fn minLength(comptime decl: @Decl, comptime min: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[minLength] must annotate a field");
-    if (min < 1)
+    if (min.value < 1)
         decl.fail(
             "#[minLength]: a lower bound below 1 could never fail - write a bound of 1 or more",
         );
 }
 
-pub fn maxLength(comptime decl: @Decl, comptime max: i32) {
+pub fn maxLength(comptime decl: @Decl, comptime max: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[maxLength] must annotate a field");
-    if (max < 0) decl.fail("#[maxLength]: the upper bound may not be negative");
+    if (max.value < 0)
+        decl.fail("#[maxLength]: the upper bound may not be negative");
 }
 
-pub fn length(comptime decl: @Decl, comptime length: i32) {
+pub fn length(comptime decl: @Decl, comptime length: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[length] must annotate a field");
-    if (length < 0) decl.fail("#[length]: the length may not be negative");
+    if (length.value < 0)
+        decl.fail("#[length]: the length may not be negative");
 }
 
-pub fn startsWith(comptime decl: @Decl, comptime prefix: string) {
+pub fn startsWith(comptime decl: @Decl, comptime prefix: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[startsWith] must annotate a field");
-    val problem = textArgProblem("startsWith", "prefix", prefix);
+    val problem = textArgProblem("startsWith", "prefix", prefix.value);
     if (problem != "") decl.fail(problem);
 }
 
-pub fn endsWith(comptime decl: @Decl, comptime suffix: string) {
+pub fn endsWith(comptime decl: @Decl, comptime suffix: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[endsWith] must annotate a field");
-    val problem = textArgProblem("endsWith", "suffix", suffix);
+    val problem = textArgProblem("endsWith", "suffix", suffix.value);
     if (problem != "") decl.fail(problem);
 }
 
-pub fn includes(comptime decl: @Decl, comptime substring: string) {
+pub fn includes(comptime decl: @Decl, comptime substring: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[includes] must annotate a field");
-    val problem = textArgProblem("includes", "substring", substring);
+    val problem = textArgProblem("includes", "substring", substring.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -830,10 +837,10 @@ pub fn uuid(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field) decl.fail("#[uuid] must annotate a field");
 }
 
-pub fn uuidV(comptime decl: @Decl, comptime version: i32) {
+pub fn uuidV(comptime decl: @Decl, comptime version: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[uuidV] must annotate a field");
-    if (version < 1 || version > 8)
+    if (version.value < 1 || version.value > 8)
         decl.fail("#[uuidV]: RFC 9562 versions are 1 to 8");
 }
 
@@ -845,17 +852,17 @@ pub fn url(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field) decl.fail("#[url] must annotate a field");
 }
 
-pub fn urlHost(comptime decl: @Decl, comptime hostname: string) {
+pub fn urlHost(comptime decl: @Decl, comptime hostname: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[urlHost] must annotate a field");
-    val problem = textArgProblem("urlHost", "pattern", hostname);
+    val problem = textArgProblem("urlHost", "pattern", hostname.value);
     if (problem != "") decl.fail(problem);
 }
 
-pub fn urlProtocol(comptime decl: @Decl, comptime protocol: string) {
+pub fn urlProtocol(comptime decl: @Decl, comptime protocol: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[urlProtocol] must annotate a field");
-    val problem = textArgProblem("urlProtocol", "pattern", protocol);
+    val problem = textArgProblem("urlProtocol", "pattern", protocol.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -896,10 +903,10 @@ pub fn jwt(comptime decl: @Decl) {
     if (decl.kind != DeclKind.Field) decl.fail("#[jwt] must annotate a field");
 }
 
-pub fn jwtAlg(comptime decl: @Decl, comptime alg: string) {
+pub fn jwtAlg(comptime decl: @Decl, comptime alg: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[jwtAlg] must annotate a field");
-    val problem = textArgProblem("jwtAlg", "algorithm", alg);
+    val problem = textArgProblem("jwtAlg", "algorithm", alg.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -935,13 +942,13 @@ pub fn mac(comptime decl: @Decl) {
 
 // One character that is not a hex digit — a delimiter that were one would
 // make `00` ambiguous with its neighbours.
-pub fn macDelimiter(comptime decl: @Decl, comptime delimiter: string) {
+pub fn macDelimiter(comptime decl: @Decl, comptime delimiter: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[macDelimiter] must annotate a field");
-    val problem = textArgProblem("macDelimiter", "delimiter", delimiter);
+    val problem = textArgProblem("macDelimiter", "delimiter", delimiter.value);
     if (problem != "") decl.fail(problem);
-    if (delimiter.length() != 1
-        || "0123456789abcdefABCDEF".indexOf(delimiter) >= 0)
+    if (delimiter.value.length() != 1
+        || "0123456789abcdefABCDEF".indexOf(delimiter.value) >= 0)
         decl.fail(
             "#[macDelimiter]: the delimiter is one character that is not a hex digit",
         );
@@ -979,9 +986,9 @@ fn isHashAlgorithm(a: string) -> bool {
         || a == "sha512";
 }
 
-pub fn hash(comptime decl: @Decl, comptime algorithm: string) {
+pub fn hash(comptime decl: @Decl, comptime algorithm: @Expr<string>) {
     if (decl.kind != DeclKind.Field) decl.fail("#[hash] must annotate a field");
-    if (isHashAlgorithm(algorithm) == false)
+    if (isHashAlgorithm(algorithm.value) == false)
         decl.fail(
             "#[hash]: the algorithm is one of md5, sha1, sha256, sha384, sha512",
         );
@@ -989,16 +996,18 @@ pub fn hash(comptime decl: @Decl, comptime algorithm: string) {
 
 pub fn hashEnc(
     comptime decl: @Decl,
-    comptime algorithm: string,
-    comptime encoding: string,
+    comptime algorithm: @Expr<string>,
+    comptime encoding: @Expr<string>,
 ) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[hashEnc] must annotate a field");
-    if (isHashAlgorithm(algorithm) == false)
+    if (isHashAlgorithm(algorithm.value) == false)
         decl.fail(
             "#[hashEnc]: the algorithm is one of md5, sha1, sha256, sha384, sha512",
         );
-    if (encoding != "hex" && encoding != "base64" && encoding != "base64url")
+    if (encoding.value != "hex"
+        && encoding.value != "base64"
+        && encoding.value != "base64url")
         decl.fail("#[hashEnc]: the encoding is one of hex, base64, base64url");
 }
 
@@ -1013,10 +1022,10 @@ pub fn isoTime(comptime decl: @Decl) {
 }
 
 // -1 is `HH:MM`, 0 whole seconds, n that many fraction digits (to 9).
-pub fn isoTimePrecision(comptime decl: @Decl, comptime precision: i32) {
+pub fn isoTimePrecision(comptime decl: @Decl, comptime precision: @Expr<i32>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[isoTimePrecision] must annotate a field");
-    if (precision < 0 - 1 || precision > 9)
+    if (precision.value < 0 - 1 || precision.value > 9)
         decl.fail(
             "#[isoTimePrecision]: the precision is -1 (minutes), 0 (seconds) or 1 to 9 fraction digits",
         );
@@ -1037,10 +1046,13 @@ pub fn isoDatetimeLocal(comptime decl: @Decl) {
         decl.fail("#[isoDatetimeLocal] must annotate a field");
 }
 
-pub fn isoDatetimePrecision(comptime decl: @Decl, comptime precision: i32) {
+pub fn isoDatetimePrecision(
+    comptime decl: @Decl,
+    comptime precision: @Expr<i32>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[isoDatetimePrecision] must annotate a field");
-    if (precision < 0 - 1 || precision > 9)
+    if (precision.value < 0 - 1 || precision.value > 9)
         decl.fail(
             "#[isoDatetimePrecision]: the precision is -1 (minutes), 0 (seconds) or 1 to 9 fraction digits",
         );
@@ -1054,11 +1066,11 @@ pub fn isoDuration(comptime decl: @Decl) {
 // The bound's type is the field's (`@Decl<T>`, decision 280): an `i32` or
 // `i64` field takes a whole number, an `f64` field any number — a fraction on
 // an integer field is refused at the argument.
-pub fn gt<T>(comptime decl: @Decl<T>, comptime value: T) {
+pub fn gt<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>) {
     if (decl.kind != DeclKind.Field) decl.fail("#[gt] must annotate a field");
 }
 
-pub fn lt<T>(comptime decl: @Decl<T>, comptime value: T) {
+pub fn lt<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>) {
     if (decl.kind != DeclKind.Field) decl.fail("#[lt] must annotate a field");
 }
 
@@ -1072,10 +1084,11 @@ pub fn negativeOrZero(comptime decl: @Decl) {
         decl.fail("#[negativeOrZero] must annotate a field");
 }
 
-pub fn multipleOf<T>(comptime decl: @Decl<T>, comptime value: T) {
+pub fn multipleOf<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[multipleOf] must annotate a field");
-    if (value <= 0) decl.fail("#[multipleOf]: the step must be greater than 0");
+    if (value.value <= 0)
+        decl.fail("#[multipleOf]: the step must be greater than 0");
 }
 
 pub fn safeInt(comptime decl: @Decl) {
@@ -1090,19 +1103,19 @@ pub fn float32(comptime decl: @Decl) {
 
 // The bound is RFC 3339 text with its zone (`Z` or `±HH:MM`), what
 // `clock.parseIso8601` reads.
-pub fn afterIso(comptime decl: @Decl, comptime instant: string) {
+pub fn afterIso(comptime decl: @Decl, comptime instant: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[afterIso] must annotate a field");
-    if (isIsoDatetimeOffset(instant) == false)
+    if (isIsoDatetimeOffset(instant.value) == false)
         decl.fail(
             "#[afterIso]: the bound is an ISO datetime with its zone, e.g. \"2020-01-01T00:00:00Z\"",
         );
 }
 
-pub fn beforeIso(comptime decl: @Decl, comptime instant: string) {
+pub fn beforeIso(comptime decl: @Decl, comptime instant: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[beforeIso] must annotate a field");
-    if (isIsoDatetimeOffset(instant) == false)
+    if (isIsoDatetimeOffset(instant.value) == false)
         decl.fail(
             "#[beforeIso]: the bound is an ISO datetime with its zone, e.g. \"2020-01-01T00:00:00Z\"",
         );
@@ -1115,17 +1128,20 @@ pub fn beforeIso(comptime decl: @Decl, comptime instant: string) {
 // text field to a closed set, comma-joined because a decorator argument is one
 // raw lexeme (`language-gaps.md`).
 
-pub fn literal(comptime decl: @Decl, comptime expected: string | i32 | bool) {
+pub fn literal(
+    comptime decl: @Decl,
+    comptime expected: @Expr<string | i32 | bool>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[literal] must annotate a field");
 }
 
-pub fn oneOf(comptime decl: @Decl, comptime options: string) {
+pub fn oneOf(comptime decl: @Decl, comptime options: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[oneOf] must annotate a field");
-    val problem = textArgProblem("oneOf", "options", options);
+    val problem = textArgProblem("oneOf", "options", options.value);
     if (problem != "") decl.fail(problem);
-    val parts = options.split(",");
+    val parts = options.value.split(",");
     if (parts.filter({ o -> o == "" }).length > 0)
         decl.fail(
             "#[oneOf]: an option may not be empty - write the options comma-joined, as \"net,rod,trap\"",
@@ -2927,9 +2943,9 @@ fn parsing(
 
 // `#[tag("status")]` beside `#[validated]` on an enum: the member that names the
 // variant. `#[validated]` reads it.
-pub fn tag(comptime decl: @Decl, comptime member: string) {
+pub fn tag(comptime decl: @Decl, comptime member: @Expr<string>) {
     if (decl.kind != DeclKind.Type) decl.fail("#[tag] must annotate a type");
-    val problem = textArgProblem("tag", "member name", member);
+    val problem = textArgProblem("tag", "member name", member.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -2968,14 +2984,17 @@ pub fn present(comptime decl: @Decl) {
 // `.default(v)`: an absent (or `null`) key takes the value, of the field's
 // type — a literal, or an enum's variant by reference (`#[orElse(.Tuna)]`,
 // decisions 280 (2), 281).
-pub fn orElse<T>(comptime decl: @Decl<T>, comptime value: T) {
+pub fn orElse<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[orElse] must annotate a field");
 }
 
 // `.default(fn)`: an absent key takes what the function answers, called per
 // parse — the function itself, not its name (decision 281).
-pub fn orElseOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
+pub fn orElseOf<T>(
+    comptime decl: @Decl<T>,
+    comptime function: @Expr<fn() -> T>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[orElseOf] must annotate a field");
 }
@@ -2983,13 +3002,16 @@ pub fn orElseOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
 // `.catch(v)`: a value that does not decode, or fails its checks, is replaced
 // by the value — of the field's type, as `#[orElse]`'s — and no violation is
 // recorded for it.
-pub fn fallback<T>(comptime decl: @Decl<T>, comptime value: T) {
+pub fn fallback<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[fallback] must annotate a field");
 }
 
 // `.catch(fn)`: the same, with what the function answers.
-pub fn fallbackOf<T>(comptime decl: @Decl<T>, comptime function: fn() -> T) {
+pub fn fallbackOf<T>(
+    comptime decl: @Decl<T>,
+    comptime function: @Expr<fn() -> T>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[fallbackOf] must annotate a field");
 }
@@ -3027,10 +3049,13 @@ pub fn uppercased(comptime decl: @Decl) {
         decl.fail("#[uppercased] must annotate a field");
 }
 
-pub fn normalized(comptime decl: @Decl, comptime form: string) {
+pub fn normalized(comptime decl: @Decl, comptime form: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[normalized] must annotate a field");
-    if (form != "NFC" && form != "NFD" && form != "NFKC" && form != "NFKD")
+    if (form.value != "NFC"
+        && form.value != "NFD"
+        && form.value != "NFKC"
+        && form.value != "NFKD")
         decl.fail("#[normalized]: the form is one of NFC, NFD, NFKC, NFKD");
 }
 
@@ -3043,18 +3068,18 @@ pub fn normalizedUrl(comptime decl: @Decl) {
 
 // `.min(8, "Too short!")`: the text the marker just before it reports instead
 // of its template.
-pub fn message(comptime decl: @Decl, comptime text: string) {
+pub fn message(comptime decl: @Decl, comptime text: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[message] must annotate a field");
-    val problem = textArgProblem("message", "text", text);
+    val problem = textArgProblem("message", "text", text.value);
     if (problem != "") decl.fail(problem);
 }
 
 // `z.string("Not a string!")`: the text the field's `invalidType` reports.
-pub fn typeMessage(comptime decl: @Decl, comptime text: string) {
+pub fn typeMessage(comptime decl: @Decl, comptime text: @Expr<string>) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[typeMessage] must annotate a field");
-    val problem = textArgProblem("typeMessage", "text", text);
+    val problem = textArgProblem("typeMessage", "text", text.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -3069,7 +3094,10 @@ pub fn stopOnFirst(comptime decl: @Decl) {
 
 // `z.preprocess(f, …)`: the field's raw document value goes through `f` before
 // it is decoded.
-pub fn preprocess(comptime decl: @Decl, comptime f: fn(input: Json) -> Json) {
+pub fn preprocess(
+    comptime decl: @Decl,
+    comptime f: @Expr<fn(input: Json) -> Json>,
+) {
     if (decl.kind != DeclKind.Field)
         decl.fail("#[preprocess] must annotate a field");
 }
@@ -3078,7 +3106,10 @@ pub fn preprocess(comptime decl: @Decl, comptime f: fn(input: Json) -> Json) {
 // valid; a `false` is a violation coded `custom`. On a type, the form takes the
 // rule, the field it reports at, a message and a code (decision 280) — typed
 // decorator arguments, which `01-checker` step 24 brings.
-pub fn check<T>(comptime decl: @Decl<T>, comptime rule: fn(v: T) -> bool) {
+pub fn check<T>(
+    comptime decl: @Decl<T>,
+    comptime rule: @Expr<fn(v: T) -> bool>,
+) {
     if (decl.kind == DeclKind.Type)
         decl.fail(
             "#[check] on a type takes the rule, the field it reports at, a message and a code - typed decorator arguments (01-checker step 24), which are not in yet",
@@ -3097,7 +3128,7 @@ pub fn check<T>(comptime decl: @Decl<T>, comptime rule: fn(v: T) -> bool) {
 // is assignable to no other parameter type (`argument 1 must be unknown`), so
 // the marker is named as text — `#[each("email")]` — until it is; a name that
 // is no marker is refused by `#[validated]`.
-pub fn each(comptime decl: @Decl, comptime marker: string) {
+pub fn each(comptime decl: @Decl, comptime marker: @Expr<string>) {
     if (decl.kind != DeclKind.Field) decl.fail("#[each] must annotate a field");
 }
 
@@ -3106,24 +3137,24 @@ pub fn each(comptime decl: @Decl, comptime marker: string) {
 // `.meta({ title, description, examples, deprecated })` on a type or a field:
 // annotations of its JSON Schema node. `#[validated]` reads them.
 
-pub fn title(comptime decl: @Decl, comptime text: string) {
+pub fn title(comptime decl: @Decl, comptime text: @Expr<string>) {
     if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
         decl.fail("#[title] must annotate a type or a field");
-    val problem = metaTextProblem("title", text);
+    val problem = metaTextProblem("title", text.value);
     if (problem != "") decl.fail(problem);
 }
 
-pub fn describe(comptime decl: @Decl, comptime text: string) {
+pub fn describe(comptime decl: @Decl, comptime text: @Expr<string>) {
     if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
         decl.fail("#[describe] must annotate a type or a field");
-    val problem = metaTextProblem("describe", text);
+    val problem = metaTextProblem("describe", text.value);
     if (problem != "") decl.fail(problem);
 }
 
-pub fn example(comptime decl: @Decl, comptime text: string) {
+pub fn example(comptime decl: @Decl, comptime text: @Expr<string>) {
     if (decl.kind != DeclKind.Type && decl.kind != DeclKind.Field)
         decl.fail("#[example] must annotate a type or a field");
-    val problem = metaTextProblem("example", text);
+    val problem = metaTextProblem("example", text.value);
     if (problem != "") decl.fail(problem);
 }
 
@@ -3134,10 +3165,10 @@ pub fn deprecated(comptime decl: @Decl) {
 
 // The id a registry knows the type by — `schemaIdOf<TypeName>()`, what
 // `spi.registerSchema` is handed; the type's name when it carries none.
-pub fn schemaId(comptime decl: @Decl, comptime id: string) {
+pub fn schemaId(comptime decl: @Decl, comptime id: @Expr<string>) {
     if (decl.kind != DeclKind.Type)
         decl.fail("#[schemaId] must annotate a type");
-    val problem = metaTextProblem("schemaId", id);
+    val problem = metaTextProblem("schemaId", id.value);
     if (problem != "") decl.fail(problem);
 }
 

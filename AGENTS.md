@@ -178,7 +178,7 @@ field held to a closed set, the options comma-joined in one argument).
   `?i64` or `?f64` checks the value when it is present and nothing when it is
   null (`if (v.f != null) …`); on any other optional type it is refused.
 - **Numeric bounds.** The bound of `gt` / `lt` / `multipleOf` is the field's
-  type — `fn gt<T>(comptime decl: @Decl<T>, comptime value: T)` (decision 280
+  type — `fn gt<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>)` (decision 280
   (2)): the checker refuses at the argument a fraction on an integer field and
   a whole literal on an `f64` field (`#[gt(5)]` is written `#[gt(5.0)]`,
   decision 247); the message shows the bound as written (a whole `f64`
@@ -193,7 +193,9 @@ field held to a closed set, the options comma-joined in one argument).
   `beforeIso` take RFC 3339 text with its zone; `#[isoDatetimePrecision]` needs
   one of `isoDatetime`, `isoDatetimeOffset`, `isoDatetimeLocal` beside it,
   which say the zones it takes.
-- **Every marker parameter is `comptime`**, as decision 280 (0) writes it.
+- **Every marker parameter is `comptime x: @Expr<T>`**, as decisions 280 (0) and 364 write it: a
+  body reads the argument with `x.value` (known at build), and a marker that never reads a
+  parameter accepts any expression of its type there.
 
 ## The parse half of `#[validated]` — a document in, a record out
 
