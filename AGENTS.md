@@ -1,5 +1,7 @@
 # validation
 
+`decisions-taken.md` is generated — from the meta repository's `specs/<milestone>/decisions-taken.md` by `scripts/decisions-split.py`; edit it there, never here.
+
 > Repository: `botopink/validation` (`git@github.com:botopink/validation.git`) · in the meta checkout: `repository/validation/`
 
 The `validation` library (decision 116 rule 5): constraint markers,
