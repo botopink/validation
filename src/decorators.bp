@@ -1332,12 +1332,11 @@ fn schemaHelperName(owner: string, field: string, id: string) -> string {
     return "__decode" + owner + "_" + field + "_" + id;
 }
 
-// The name of a function decoding `t` — what a combinator is handed. Always
-// an emitted function of the application's module, a declared type's member
-// included, the function that calls it being what is passed.
-// LANGUAGE GAP: a static member is not a value on erlang — `Address.parseAt`
-// as an argument is "variable 'Address' is unbound".
+// The name of a function decoding `t` — what a combinator is handed: a
+// declared type's own member (`Address.parseAt`), else an emitted function of
+// the application's module.
 fn schemaRef(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return t + ".parseAt";
     return schemaHelperName(owner, field, id);
 }
 
@@ -1384,8 +1383,10 @@ fn schemaResult(t: string) -> string {
         + ", ValidationReport> {\n";
 }
 
-// The function named by `schemaRef(t, …, id)`, and what it needs.
+// The function named by `schemaRef(t, …, id)`, and what it needs; `""` for a
+// declared type, whose member is named.
 fn schemaNeed(t: string, owner: string, field: string, id: string) -> string {
+    if (schemaIsDeclared(t)) return "";
     if (schemaIsUnion(t) || schemaIsTuple(t))
         return schemaHelpers(t, owner, field, id);
     return "fn "
@@ -2005,10 +2006,6 @@ fn metaKeywords(annotations: Array<DeclAnnotation>) -> Array<string> {
     return out;
 }
 
-// LANGUAGE GAP: a decorator body whose lambda holds many locals overflows the
-// comptime stack (`wasm3: [trap] stack overflow`), so the field's node is this
-// helper's, not the record loop's.
-//
 // A record field's node: its type's keywords, its markers' (an `#[each]`
 // marker's on the items), `required` of an `#[exhaustive]` dict, the `default`
 // of an `#[orElse]`, `null` for a `?T` that is not `#[present]`, and its
@@ -2436,7 +2433,6 @@ fn parsing(
     var known: Array<string> = [];
     var helpers: Array<string> = [];
     var fallbacks: Array<string> = [];
-    var rebuilt: Array<string> = [];
     var hints: Array<string> = [];
     var encMembers: Array<string> = [];
     var encRest = "";
@@ -2728,14 +2724,6 @@ fn parsing(
                     + f.name,
             );
         }
-        if (fallback == "" || fallback.startsWith("!"))
-            rebuilt.push(f.name + ": __v." + f.name)
-        else
-            rebuilt.push(
-                fallbacks
-                    .slice(fallbacks.length - 1, fallbacks.length)
-                    .join(""),
-            );
         if (outer != "") call = outer + "(" + source + ", " + path + ")";
         // The field's JSON Schema node.
         val nodeText = fieldNode(
@@ -2840,15 +2828,13 @@ fn parsing(
         "derived.underField(at, \"" + onlyField + "\", "
     else
         "derived.under(at, ";
-    // The record is rebuilt field by field, not `Name(..__v, …)`: inside a
-    // member, commonJS emits the spread as a positional argument.
-    // LANGUAGE GAP: `T(..v, f: x)` in a member added by `decl.addMember` is
-    // `new T(v, x)` on commonJS.
+    // The record is `__v` with each `#[fallback]` field replaced where it
+    // failed.
     val checks = if (fallbacks.length > 0)
         "    val __bad = derived.failedFields(__v.validate());\n    val __w = "
             + name
-            + "("
-            + rebuilt.join(", ")
+            + "(..__v, "
+            + fallbacks.join(", ")
             + ");\n    val __checked = "
             + rooted
             + "__w.validate());\n    if (__checked.violations.length > 0) { throw __checked; }\n    return __w;\n"

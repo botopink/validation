@@ -20,44 +20,39 @@ import {report.ValidationReport, report.Violation};
 import {messages.setMessageSource, messages.builtInOnly};
 import {json, json.Json, collections.Set, collections.Dict, querystring} from "std";
 
-// The types here are named apart from the examples' (`SignupDoc`, not
-// `Signup`).
-// LANGUAGE GAP: under `botopink test --target erlang`, two test modules that
-// declare a type of one name share its module, so a member of one is reached
-// from the other.
 #[validated]
-pub type SignupDoc(
+pub type Signup(
     username: string,
     xp: i32,
     bio: ?string,
 )
 
 #[validated]
-pub type AddressDoc(
+pub type Address(
     street: string,
     zip: string,
 )
 
 #[validated]
-pub type LineDoc(
+pub type Line(
     sku: string,
     quantity: i32,
 )
 
 #[validated]
-pub type OrderDoc(
+pub type Order(
     id: string,
-    ship: AddressDoc,
-    billing: ?AddressDoc,
-    lines: Array<LineDoc>,
+    ship: Address,
+    billing: ?Address,
+    lines: Array<Line>,
     tags: string[],
     note: ?string,
 )
 
 #[validated]
-pub type CategoryDoc(
+pub type Category(
     name: string,
-    subcategories: Array<CategoryDoc>,
+    subcategories: Array<Category>,
 )
 
 #[validated]
@@ -96,7 +91,7 @@ fn fresh() -> i32 {
     return setMessageSource(builtInOnly());
 }
 
-fn signupCodes(r: @Result<SignupDoc, ValidationReport>) -> string {
+fn signupCodes(r: @Result<Signup, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -105,7 +100,7 @@ fn signupCodes(r: @Result<SignupDoc, ValidationReport>) -> string {
     };
 }
 
-fn orderCodes(r: @Result<OrderDoc, ValidationReport>) -> string {
+fn orderCodes(r: @Result<Order, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -123,7 +118,7 @@ fn numberCodes(r: @Result<Numbers, ValidationReport>) -> string {
     };
 }
 
-fn signupMessages(r: @Result<SignupDoc, ValidationReport>) -> string {
+fn signupMessages(r: @Result<Signup, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -136,7 +131,7 @@ fn signupMessages(r: @Result<SignupDoc, ValidationReport>) -> string {
 
 test "validation: a well-formed document becomes a typed record" {
     val _f = fresh();
-    val signup = try SignupDoc.decode("""{"username": "billie", "xp": 100}""");
+    val signup = try Signup.decode("""{"username": "billie", "xp": 100}""");
     assert signup.username == "billie";
     assert signup.xp == 100;
     assert signup.bio == null;
@@ -144,25 +139,25 @@ test "validation: a well-formed document becomes a typed record" {
 
 test "validation: every wrong field is reported, in declaration order" {
     val _f = fresh();
-    val r = SignupDoc.decode("""{"username": 42, "xp": "100", "bio": 7}""");
+    val r = Signup.decode("""{"username": 42, "xp": "100", "bio": 7}""");
     assert signupCodes(r)
         == "username:invalidType,xp:invalidType,bio:invalidType";
 }
 
 test "validation: the message names what was expected and what arrived" {
     val _f = fresh();
-    val r = SignupDoc.decode("""{"username": 42, "xp": "100"}""");
+    val r = Signup.decode("""{"username": 42, "xp": "100"}""");
     assert signupMessages(r)
         == "username: must be text, was a number | xp: must be a whole number, was text";
 }
 
 test "validation: a missing key is required; a missing optional key is null" {
     val _f = fresh();
-    assert signupCodes(SignupDoc.decode("""{"xp": 1}"""))
+    assert signupCodes(Signup.decode("""{"xp": 1}"""))
         == "username:required";
-    assert signupCodes(SignupDoc.decode("""{"username": null, "xp": 1}"""))
+    assert signupCodes(Signup.decode("""{"username": null, "xp": 1}"""))
         == "username:required";
-    val explicit = try SignupDoc.decode(
+    val explicit = try Signup.decode(
         """{"username": "a", "xp": 1, "bio": null}""",
     );
     assert explicit.bio == null;
@@ -170,15 +165,15 @@ test "validation: a missing key is required; a missing optional key is null" {
 
 test "validation: an i32 refuses a fraction and a value outside its range" {
     val _f = fresh();
-    assert signupCodes(SignupDoc.decode("""{"username": "a", "xp": 1.5}"""))
+    assert signupCodes(Signup.decode("""{"username": "a", "xp": 1.5}"""))
         == "xp:invalidType";
     assert signupCodes(
-        SignupDoc.decode("""{"username": "a", "xp": 3000000000}"""),
+        Signup.decode("""{"username": "a", "xp": 3000000000}"""),
     )
         == "xp:invalidType";
-    val whole = try SignupDoc.decode("""{"username": "a", "xp": 7.0}""");
+    val whole = try Signup.decode("""{"username": "a", "xp": 7.0}""");
     assert whole.xp == 7;
-    val negative = try SignupDoc.decode(
+    val negative = try Signup.decode(
         """{"username": "a", "xp": -2147483648}""",
     );
     assert negative.xp < 0;
@@ -186,29 +181,29 @@ test "validation: an i32 refuses a fraction and a value outside its range" {
 
 test "validation: a key the record does not declare is refused" {
     val _f = fresh();
-    val r = SignupDoc.decode(
+    val r = Signup.decode(
         """{"username": "a", "xp": 1, "admin": true, "role": "x"}""",
     );
     assert signupCodes(r) == "admin:unrecognizedKey,role:unrecognizedKey";
     assert signupMessages(r)
-        == "admin: admin is not a field of SignupDoc | role: role is not a field of SignupDoc";
+        == "admin: admin is not a field of Signup | role: role is not a field of Signup";
 }
 
 test "validation: a document that is not an object is one violation at the root" {
     val _f = fresh();
-    assert signupCodes(SignupDoc.decode("[1]")) == ":invalidType";
-    assert signupCodes(SignupDoc.decode("null")) == ":required";
+    assert signupCodes(Signup.decode("[1]")) == ":invalidType";
+    assert signupCodes(Signup.decode("null")) == ":required";
 }
 
 test "validation: text that is not JSON is one violation, coded invalidJson" {
     val _f = fresh();
-    assert signupCodes(SignupDoc.decode("{nope")) == ":invalidJson";
+    assert signupCodes(Signup.decode("{nope")) == ":invalidJson";
 }
 
 test "validation: parse reads a document already decoded" {
     val _f = fresh();
     val doc = try json.decode("""{"username": "billie", "xp": 3}""");
-    val signup = try SignupDoc.parse(doc);
+    val signup = try Signup.parse(doc);
     assert signup.xp == 3;
 }
 
@@ -216,7 +211,7 @@ test "validation: parse reads a document already decoded" {
 
 test "validation: a nested document becomes nested records" {
     val _f = fresh();
-    val order = try OrderDoc.decode(
+    val order = try Order.decode(
         """{"id": "o1", "ship": {"street": "Rua A", "zip": "01310-100"},
             "lines": [{"sku": "x", "quantity": 2}], "tags": ["a", "b"]}""",
     );
@@ -229,7 +224,7 @@ test "validation: a nested document becomes nested records" {
 
 test "validation: a violation names the path to the value" {
     val _f = fresh();
-    val r = OrderDoc.decode(
+    val r = Order.decode(
         """{"id": "o1", "ship": {"street": "Rua A"},
             "lines": [{"sku": "x", "quantity": 2}, {"sku": 7, "quantity": "two"}],
             "tags": ["a", 1]}""",
@@ -240,7 +235,7 @@ test "validation: a violation names the path to the value" {
 
 test "validation: an optional record is null when absent and decoded when present" {
     val _f = fresh();
-    val r = OrderDoc.decode(
+    val r = Order.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b"}, "billing": {"street": 1},
             "lines": [], "tags": []}""",
     );
@@ -249,7 +244,7 @@ test "validation: an optional record is null when absent and decoded when presen
 
 test "validation: an unknown key inside a nested record carries its path" {
     val _f = fresh();
-    val r = OrderDoc.decode(
+    val r = Order.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b", "country": "BR"},
             "lines": [{"sku": "x", "quantity": 1, "gift": true}], "tags": []}""",
     );
@@ -259,7 +254,7 @@ test "validation: an unknown key inside a nested record carries its path" {
 
 test "validation: a list field refuses a value that is not a list" {
     val _f = fresh();
-    val r = OrderDoc.decode(
+    val r = Order.decode(
         """{"id": "o1", "ship": {"street": "a", "zip": "b"}, "lines": {}, "tags": "a"}""",
     );
     assert orderCodes(r) == "lines:invalidType,tags:invalidType";
@@ -267,7 +262,7 @@ test "validation: a list field refuses a value that is not a list" {
 
 test "validation: a type that names itself decodes to any depth" {
     val _f = fresh();
-    val tree = try CategoryDoc.decode(
+    val tree = try Category.decode(
         """{"name": "root", "subcategories": [
               {"name": "a", "subcategories": [{"name": "a1", "subcategories": []}]},
               {"name": "b", "subcategories": []}]}""",
@@ -278,7 +273,7 @@ test "validation: a type that names itself decodes to any depth" {
     assert first.subcategories.length == 1;
 }
 
-fn depthOf(c: CategoryDoc) -> i32 {
+fn depthOf(c: Category) -> i32 {
     var depth = 1;
     var at = c;
     while (at.subcategories.length > 0) {
@@ -290,12 +285,12 @@ fn depthOf(c: CategoryDoc) -> i32 {
 
 test "validation: a four-level recursive document decodes, a bad leaf at its path" {
     val _f = fresh();
-    val tree = try CategoryDoc.decode(
+    val tree = try Category.decode(
         """{"name": "1", "subcategories": [{"name": "2", "subcategories": [
               {"name": "3", "subcategories": [{"name": "4", "subcategories": []}]}]}]}""",
     );
     assert depthOf(tree) == 4;
-    val r = CategoryDoc.decode(
+    val r = Category.decode(
         """{"name": "1", "subcategories": [{"name": "2", "subcategories": [
               {"name": "3", "subcategories": [{"name": 4, "subcategories": []}]}]}]}""",
     );
@@ -335,7 +330,7 @@ fn nestedDocument(levels: i32) -> Json {
 
 test "validation: a self-reference 2000 levels deep does not exhaust the stack" {
     val _f = fresh();
-    val tree = try CategoryDoc.parse(nestedDocument(2000));
+    val tree = try Category.parse(nestedDocument(2000));
     assert depthOf(tree) == 2000;
 }
 
@@ -358,7 +353,7 @@ fn nestedText(levels: i32) -> string {
 
 test "validation: a self-reference 2000 levels deep read from JSON text" {
     val _f = fresh();
-    val tree = try CategoryDoc.decode(nestedText(2000));
+    val tree = try Category.decode(nestedText(2000));
     assert depthOf(tree) == 2000;
 }
 
@@ -399,7 +394,7 @@ test "validation: a list of a validated type is a field, with each item at its p
     val docs = try json.decode(
         """{"id": "o1", "ship": {"street": "s", "zip": "z"}, "lines": [{"sku": "a", "quantity": 1}, {"sku": 2, "quantity": 2}], "tags": []}""",
     );
-    val located = case OrderDoc.parse(docs) {
+    val located = case Order.parse(docs) {
         Ok(_) -> "";
         Error(report) -> report.violations
             .map({ v -> v.field + ":" + v.code })
@@ -606,8 +601,8 @@ test "validation: a name the record does not declare is the unknown-key rule" {
 test "validation: nested records, optionals, lists, unions, sets and dicts round-trip" {
     val text = """{"id": "A1", "ship": {"street": "Rua A", "zip": "50000"}, "lines": [{"sku": "x", "quantity": 2}], "tags": ["t"]}""";
     val doc = try json.decode(text) catch Json.Null;
-    val order = try OrderDoc.parse(doc);
-    val again = try OrderDoc.parse(try OrderDoc.encode(order));
+    val order = try Order.parse(doc);
+    val again = try Order.parse(try Order.encode(order));
     assert again.ship.zip == "50000";
     assert again.billing == null;
     assert again.lines.map({ l -> l.sku }).join(",") == "x";
