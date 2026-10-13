@@ -375,7 +375,7 @@ pub fn validated(comptime decl: @Decl, comptime form: @Expr<?Form> = null) {
     val helperText = outputs.slice(0, 1).join("");
     val parseProblem = outputs.slice(1, 2).join("");
     outputs.slice(2, outputs.length).forEach({ m -> decl.addMember(m) });
-    if (helperText != "") @emit(helperText);
+    helperFns(helperText).forEach({ m -> decl.addMember(m) });
     if (parseProblem != "") decl.fail(parseProblem);
     if (problem != "") decl.fail(problem);
 }
@@ -1323,21 +1323,27 @@ fn schemaSupported(t: string) -> bool {
 // a module of this package, where the namespace is the bare `import
 // {schemas};` (`schemas is not defined` on node, `decodeString/3 undefined` on
 // erlang) - and this library's own tests are such modules. So each part of a
-// field's type below its own level gets one emitted function, named after the
+// field's type below its own level gets one helper function, named after the
 // record, the field and the part's place in the type (`0` the field, `0_1`
-// its second part, …), whose body is the call: a plain function of the module
-// the record is declared in. A tuple and a union get one for themselves too —
+// its second part, …), whose body is the call: a private member of the
+// record (`Owner.__decode…`). A tuple and a union get one for themselves too —
 // their decoder is straight-line code over their parts.
 fn schemaHelperName(owner: string, field: string, id: string) -> string {
     return "__decode" + owner + "_" + field + "_" + id;
 }
 
+// The helper named through its type: every helper is a member of the
+// annotated type (decision 216), so a call or a value names it `Owner.helper`.
+fn schemaHelperRef(owner: string, field: string, id: string) -> string {
+    return owner + "." + schemaHelperName(owner, field, id);
+}
+
 // The name of a function decoding `t` — what a combinator is handed: a
-// declared type's own member (`Address.parseAt`), else an emitted function of
-// the application's module.
+// declared type's own member (`Address.parseAt`), else a helper member of the
+// record being decoded.
 fn schemaRef(t: string, owner: string, field: string, id: string) -> string {
     if (schemaIsDeclared(t)) return t + ".parseAt";
-    return schemaHelperName(owner, field, id);
+    return schemaHelperRef(owner, field, id);
 }
 
 // The expression that decodes a value of type `t` read from `source` at `path`.
@@ -1357,13 +1363,13 @@ fn schemaCall(
     if (t == "bool") return "derived.decodeBool" + tail + ")";
     if (t == "Json") return "derived.decodeJson" + tail + ")";
     if (schemaIsUnion(t) || schemaIsTuple(t))
-        return schemaHelperName(owner, field, id) + tail + ")";
+        return schemaHelperRef(owner, field, id) + tail + ")";
     if (schemaIsDict(t)) {
         val kv = schemaArgs(t);
         return "derived.decodeDictOf"
             + tail
             + ", "
-            + schemaHelperName(owner, field, id + "_0")
+            + schemaHelperRef(owner, field, id + "_0")
             + ", "
             + schemaRef(kv.slice(1, 2).join(""), owner, field, id + "_1")
             + ")";
@@ -1553,7 +1559,7 @@ fn encHelperName(owner: string, field: string, id: string) -> string {
 }
 
 fn encRef(t: string, owner: string, field: string, id: string) -> string {
-    return encHelperName(owner, field, id);
+    return owner + "." + encHelperName(owner, field, id);
 }
 
 fn encCall(
@@ -1570,13 +1576,13 @@ fn encCall(
     if (t == "bool") return "Json.Bool(" + e + ")";
     if (t == "Json") return e;
     if (schemaIsUnion(t) || schemaIsTuple(t))
-        return encHelperName(owner, field, id) + "(" + e + ")";
+        return encRef(t, owner, field, id) + "(" + e + ")";
     if (schemaIsDict(t)) {
         val kv = schemaArgs(t);
         return "derived.encodeDictOf("
             + e
             + ", "
-            + encHelperName(owner, field, id + "_0")
+            + encRef(t, owner, field, id + "_0")
             + ", "
             + encRef(kv.slice(1, 2).join(""), owner, field, id + "_1")
             + ")";
@@ -2141,8 +2147,8 @@ fn unquoted(l: string) -> string {
     return l;
 }
 
-// The members every `#[validated]` type has from its `parseAt` (decision 327),
-// and the free function `decode` hands `derived.decodeText`.
+// The members every `#[validated]` type has from its `parseAt` (decision 327);
+// `decode` hands `derived.decodeText` the member `T.parseAt` as a value.
 fn schemaCommonMembers(name: string) -> Array<string> {
     return [
         "pub fn parse(input: Json) -> @Result<"
@@ -2152,19 +2158,10 @@ fn schemaCommonMembers(name: string) -> Array<string> {
             + ".parseAt(input, \"\");\n}",
         "pub fn decode(text: string) -> @Result<"
             + name
-            + ", ValidationReport> {\n    return try derived.decodeText(text, __parseAt"
+            + ", ValidationReport> {\n    return try derived.decodeText(text, "
             + name
-            + ");\n}",
+            + ".parseAt);\n}",
     ];
-}
-
-fn schemaCommonHelper(name: string) -> string {
-    return "fn __parseAt"
-        + name
-        + schemaResult(name)
-        + "    return try "
-        + name
-        + ".parseAt(input, at);\n}\n";
 }
 
 // `#[validated]` on an enum. Payload-less: the variant's NAME is the wire value
@@ -2224,7 +2221,9 @@ fn schemaEnum(
         .map({ v ->
             "    if (__tag == \""
                 + v
-                + "\") return try __decode"
+                + "\") return try "
+                + name
+                + ".__decode"
                 + name
                 + "_"
                 + v
@@ -2261,7 +2260,9 @@ fn schemaEnum(
             + tag
             + "\");\n"
             + dispatch.join("\n")
-            + "\n    return try __decode"
+            + "\n    return try "
+            + name
+            + ".__decode"
             + name
             + "_"
             + last
@@ -2363,7 +2364,8 @@ fn literalFor(l: string, t: string, declared: string) -> string {
 }
 
 // What `#[validated]` adds to make the type its own schema (decisions 306,
-// 327): element 0 the free functions its members call, element 1 a refusal
+// 327): element 0 the helper functions its members call (each one a private
+// member, `helperFns`), element 1 a refusal
 // (`""` for none), every other element one member, one `fn` each.
 fn parsing(
     name: string,
@@ -2407,7 +2409,7 @@ fn parsing(
     val enumRefs = if (tag == "") [] else variants.map({ v -> name + v });
     if (isEnum) {
         val parsed = schemaEnum(name, variants, tag);
-        return [parsed.slice(0, 1).join("") + schemaCommonHelper(name), ""]
+        return [parsed.slice(0, 1).join(""), ""]
             .append(parsed.slice(1, parsed.length))
             .append(encEnumMembers(name, variants, tag))
             .append(schemaDocMembers(name, enumNode, enumRefs, annotations))
@@ -2586,7 +2588,14 @@ fn parsing(
                     + eachOps
                     + "\");\n}\n",
             );
-            call = eachName + "(" + coercedSource + ", " + path + ")";
+            call = name
+                + "."
+                + eachName
+                + "("
+                + coercedSource
+                + ", "
+                + path
+                + ")";
         }
         if (ops != "" && bare != "string")
             problem = where
@@ -2661,8 +2670,8 @@ fn parsing(
                     + inner
                     + ";\n}\n",
             );
-            inner = orElseName + "(input, at)";
-            outer = orElseName;
+            inner = name + "." + orElseName + "(input, at)";
+            outer = name + "." + orElseName;
         }
         if (ops != ""
             && bare == "string"
@@ -2685,8 +2694,8 @@ fn parsing(
                     + ops
                     + "\");\n}\n",
             );
-            inner = transformName + "(input, at)";
-            outer = transformName;
+            inner = name + "." + transformName + "(input, at)";
+            outer = name + "." + transformName;
         }
         val fallback = if (fallbackLexeme != "")
             literalFor(fallbackLexeme, bare, declared)
@@ -2713,7 +2722,7 @@ fn parsing(
                     + fallback
                     + ";\n    return try __r;\n}\n",
             );
-            outer = fallbackName;
+            outer = name + "." + fallbackName;
             fallbacks.push(
                 f.name
                     + ": if (__bad.indexOf(\""
@@ -2916,7 +2925,7 @@ fn parsing(
                 .append(metaKeywords(annotations)),
         );
     return [
-        helperText + schemaCommonHelper(name),
+        helperText,
         problem,
         parseAt,
         json,
@@ -2925,6 +2934,18 @@ fn parsing(
     ]
         .append(schemaDocMembers(name, recordNode, refs, annotations))
         .append(schemaCommonMembers(name));
+}
+
+// The helpers `parsing` writes, one function each: every one starts a line
+// with `fn `, and a body's lines are indented, so a line that starts with
+// `fn ` opens the next helper. Each is a private member of the annotated type
+// (decision 216), named `Owner.helper` where the type's members call it.
+fn helperFns(text: string) -> Array<string> {
+    if (text == "") return [];
+    return ("\n" + text)
+        .split("\nfn ")
+        .filter({ p -> p != "" })
+        .map({ p -> "fn " + p });
 }
 
 // `#[tag("status")]` beside `#[validated]` on an enum: the member that names the

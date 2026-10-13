@@ -196,10 +196,10 @@ fn emittedName(n: string) -> string {
 }
 
 // A decorator body calls a bodied function of its own module, takes a
-// parameter's default, and emits code that names a module through its
+// parameter's default, and adds a member that names a module through its
 // namespace.
 pub fn maker(comptime decl: @Decl, comptime suffix: @Expr<string> = "X") {
-    @emit(
+    decl.addMember(
         "pub fn "
             + emittedName(decl.name)
             + suffix.value
@@ -214,8 +214,8 @@ pub type Thing(name: string)
 pub type Other(name: string)
 
 test "validation: a decorator calls a sibling function and takes a default" {
-    assert madeThingX() == 1;
-    assert madeOtherY() == 1;
+    assert Thing.madeThingX() == 1;
+    assert Other.madeOtherY() == 1;
 }
 
 test "validation: a module is named through its namespace" {

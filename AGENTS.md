@@ -375,11 +375,13 @@ import {json.Json} from "std";
 
 Each part of a field's type below the field's own level (`Array<Array<i32>>`,
 `?Array<string>`, a `Dict`'s key and value, a field of another `#[validated]`
-type) gets one emitted function, `__decode<Record>_<field>_<place>` (`0` the
-field, `0_1` its second part, …), because neither a library decoder nor a
-type's member can be passed as a value from emitted code (see *Language
-notes*); a tuple and a union get one for themselves, their straight-line
-decoder. `decode` hands `derived.decodeText` the emitted `__parseAt<Type>`.
+type) gets one helper function, `__decode<Record>_<field>_<place>` (`0` the
+field, `0_1` its second part, …) — a private member of the record, called and
+passed as `Record.__decode…` — because a library decoder cannot be passed as a
+value from generated code (see *Language notes*); a tuple and a union get one
+for themselves, their straight-line decoder. `decode` hands
+`derived.decodeText` the member `Type.parseAt` as a value. The decorator writes
+only members (decision 216): no free function of the application's module.
 
 The checks emit bare predicate names (`vNotBlank(…)`), so a type with markers
 imports the predicates too. Decision 145 moves them to the namespaced form;
@@ -505,9 +507,6 @@ library writes instead.
   (`derived is not defined` on node, `decodeString/3 undefined` on erlang). A
   consumer's `from "validation"` namespace is. The emitted code uses named
   functions instead of lambdas, which works in both.
-- A type's static member is not a value on erlang (`Address.parseAt` as an
-  argument is "variable 'Address' is unbound"); the emitted function that calls
-  it is passed instead.
 - A record spread inside a member a decorator adds (`T(..v, f: x)`) is emitted
   `new T(v, x)` on commonJS; the fallback rebuild names every field.
 - A comptime decorator parameter takes no default, and a run-time one whose
