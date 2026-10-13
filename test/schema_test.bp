@@ -153,8 +153,7 @@ test "validation: the message names what was expected and what arrived" {
 
 test "validation: a missing key is required; a missing optional key is null" {
     val _f = fresh();
-    assert signupCodes(Signup.decode("""{"xp": 1}"""))
-        == "username:required";
+    assert signupCodes(Signup.decode("""{"xp": 1}""")) == "username:required";
     assert signupCodes(Signup.decode("""{"username": null, "xp": 1}"""))
         == "username:required";
     val explicit = try Signup.decode(
