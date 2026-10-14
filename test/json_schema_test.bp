@@ -25,7 +25,7 @@ fn sameJson(a: Json, b: Json) -> bool {
 fn sameMembers(am: Array<#(string, Json)>, bm: Array<#(string, Json)>) -> bool {
     if (am.length != bm.length) return false;
     return am.filter({ m ->
-        bm.filter({ n -> n[0] == m[0] && sameJson(m[1], n[1]) }).length == 0;
+        bm.filter({ n -> n[0] == m[0] && sameJson(m[1], n[1]) }).length == 0
     }).length
         == 0;
 }

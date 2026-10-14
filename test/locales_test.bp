@@ -19,7 +19,7 @@ fn placeholders(text: string) -> string {
         .split("{")
         .slice(1, text.split("{").length)
         .map({ part ->
-            part.split("}").slice(0, 1).join("");
+            part.split("}").slice(0, 1).join("")
         })
         .join(",");
 }
@@ -46,7 +46,7 @@ fn placeholdersMovedIn(source: MessageSource) -> string {
     val template = source.template;
     return codes()
         .filter({ c ->
-            placeholders(template(c)) != placeholders(builtInTemplate(c));
+            placeholders(template(c)) != placeholders(builtInTemplate(c))
         })
         .join(",");
 }

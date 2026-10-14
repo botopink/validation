@@ -350,7 +350,7 @@ pub fn validated(comptime decl: @Decl, comptime form: @Expr<?Form> = null) {
                 "    __vs = __vs.append(Violation.firstFailing(["
                     + elements.join(", ")
                     + "]));",
-            );
+            )
     });
     decl.addMember(
         "pub fn validate(self: Self) -> ValidationReport {\n    val v = self;\n    var __vs: Array<Violation> = [];\n"
@@ -636,7 +636,7 @@ fn markerRule(
             val shapes = names.filter({ m ->
                 m == "isoDatetime"
                     || m == "isoDatetimeOffset"
-                    || m == "isoDatetimeLocal";
+                    || m == "isoDatetimeLocal"
             });
             if (shapes.length == 0)
                 return "!it fixes the precision only - add #[isoDatetime], #[isoDatetimeOffset] or #[isoDatetimeLocal] to say which zones the field takes";
@@ -1703,7 +1703,7 @@ fn encEnumMembers(
                 + tag
                 + "\", \""
                 + v
-                + "\");";
+                + "\");"
     });
     return [
         "pub fn __json(v: "
@@ -2007,7 +2007,7 @@ fn metaKeywords(annotations: Array<DeclAnnotation>) -> Array<string> {
         if (a.name == "example")
             out.push(jsKw("examples", jsArr([jsStr(first)])));
         if (a.name == "deprecated")
-            out.push(jsKw("deprecated", "Json.Bool(true)"));
+            out.push(jsKw("deprecated", "Json.Bool(true)"))
     });
     return out;
 }
@@ -2054,7 +2054,7 @@ fn fieldNode(
         if (a.name != "each")
             keywords = keywords.append(
                 markerKeywords(a.name, a.args, nodeType),
-            );
+            )
     });
     val missing = keywords.filter({ k -> k.startsWith("!") });
     if (missing.length > 0) return missing.slice(0, 1).join("");
@@ -2199,7 +2199,7 @@ fn schemaEnum(
                     + name
                     + "."
                     + v
-                    + ";";
+                    + ";"
             });
         return [
             "",
@@ -2227,7 +2227,7 @@ fn schemaEnum(
                 + name
                 + "_"
                 + v
-                + "(__rest, at);";
+                + "(__rest, at);"
         });
     val payloads = variants.map({ v ->
         "fn __decode"
@@ -2242,7 +2242,7 @@ fn schemaEnum(
             + name
             + "."
             + v
-            + "(value: __v);\n}\n";
+            + "(value: __v);\n}\n"
     });
     return [
         payloads.join(""),
@@ -2400,7 +2400,7 @@ fn parsing(
                                 + jsText(tag)
                                 + ", "
                                 + jsText(v)
-                                + ")";
+                                + ")"
                         }),
                     ),
                 ),
@@ -2416,7 +2416,7 @@ fn parsing(
             .append(schemaCommonMembers(name));
     }
     val transparent = annotations.filter({ a ->
-        a.name == "validated" && a.args.join("") == "transparent";
+        a.name == "validated" && a.args.join("") == "transparent"
     }).length
         > 0;
     var problem = "";
@@ -2561,13 +2561,13 @@ fn parsing(
                 if (a.name == "normalized")
                     "normalized:" + unquoted(a.args.join(""))
                 else
-                    a.name;
+                    a.name
             })
             .join("|");
         val eachOps = f.annotations
             .filter({ a ->
                 a.name == "each"
-                    && transformNames().indexOf(unquoted(a.args.join(""))) >= 0;
+                    && transformNames().indexOf(unquoted(a.args.join(""))) >= 0
             })
             .map({ a -> unquoted(a.args.join("")) })
             .join("|");
@@ -2603,7 +2603,7 @@ fn parsing(
                 + declared
                 + "`";
         f.annotations.forEach({ a ->
-            if (schemaIsMarker(a.name)) marked = true;
+            if (schemaIsMarker(a.name)) marked = true
         });
         if (isPresent) {
             if (declared.startsWith("?") == false)
@@ -2810,7 +2810,7 @@ fn parsing(
                     + "`";
         }
         args.push(f.name + ": try __r_" + f.name);
-        if (isRest == false) known.push("\"" + f.name + "\"");
+        if (isRest == false) known.push("\"" + f.name + "\"")
     });
     if (rests > 1)
         problem = "#[validated] on `"

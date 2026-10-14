@@ -41,7 +41,7 @@ pub type Violation(
                 code: v.code,
                 message: text,
                 invalidValue: v.invalidValue,
-            );
+            )
         });
     }
 

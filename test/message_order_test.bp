@@ -22,7 +22,7 @@ fn tableSource(
     rows: Array<#(string, string)>,
 ) -> MessageSource {
     return MessageSource(locale: { -> locale }, template: { key ->
-        rows.filter({ r -> r[0] == key }).map({ r -> r[1] }).join("");
+        rows.filter({ r -> r[0] == key }).map({ r -> r[1] }).join("")
     });
 }
 

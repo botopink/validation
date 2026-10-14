@@ -191,7 +191,7 @@ fn draft07Members(members: Array<#(string, Json)>) -> Array<#(string, Json)> {
         else if (tuple && m[0] == "items")
             out.push(#("additionalItems", m[1]))
         else
-            out.push(#(m[0], draft07Node(m[1])));
+            out.push(#(m[0], draft07Node(m[1])))
     });
     return out;
 }
@@ -241,7 +241,7 @@ fn openApiMembers(members: Array<#(string, Json)>) -> Array<#(string, Json)> {
                 (others.at(0) ?? Json.Null)
                     .members()
                     .forEach({ o ->
-                        out.push(#(o[0], openApiNode(o[1])));
+                        out.push(#(o[0], openApiNode(o[1])))
                     })
             else
                 out.push(#("anyOf", openApiNode(Json.Arr(others))));
@@ -249,7 +249,7 @@ fn openApiMembers(members: Array<#(string, Json)>) -> Array<#(string, Json)> {
         } else if (k == "const")
             out.push(#("enum", Json.Arr([v])))
         else
-            out.push(#(k, openApiNode(v)));
+            out.push(#(k, openApiNode(v)))
     });
     return out;
 }

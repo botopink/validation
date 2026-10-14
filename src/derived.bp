@@ -136,7 +136,7 @@ pub fn under(at: string, report: ValidationReport) -> ValidationReport {
     if (at == "") return report;
     return ValidationReport(
         violations: report.violations.map({ v ->
-            violation(nested(at, v.field), v.code, v.message, v.invalidValue);
+            violation(nested(at, v.field), v.code, v.message, v.invalidValue)
         }),
     );
 }
@@ -155,7 +155,7 @@ pub fn underField(
                 v.code,
                 v.message,
                 v.invalidValue,
-            );
+            )
         }),
     );
 }
@@ -340,7 +340,7 @@ pub fn unknownKeys(
                 [arg("key", m[0]), arg("type", typeName)],
             ),
             "",
-        );
+        )
     });
 }
 
@@ -788,7 +788,7 @@ pub fn typeRestated<T>(
             if (v.code == "invalidType" && v.field == at)
                 violation(v.field, v.code, text, v.invalidValue)
             else
-                v;
+                v
         }),
     );
 }
@@ -915,7 +915,7 @@ pub fn documentOf(
     val others = defs
         .filter({ d -> d[0] != name })
         .map({ d ->
-            #(d[0], refsRenamed(d[1], own, "#"));
+            #(d[0], refsRenamed(d[1], own, "#"))
         });
     val schemaMember: Array<#(string, Json)> = [
         #("$schema", Json.Str("https://json-schema.org/draft/2020-12/schema")),

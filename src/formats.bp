@@ -147,7 +147,7 @@ pub fn isCuid(s: string) -> bool {
     if (inSet(cs.at(0) ?? "", "cC") == false) return false;
     val tail = cs.slice(1, cs.length);
     return tail.filter({ c ->
-        c.length() != 1 || c == "-" || isPrintableAscii(c) == false || c == " ";
+        c.length() != 1 || c == "-" || isPrintableAscii(c) == false || c == " "
     }).length
         == 0;
 }
@@ -340,7 +340,7 @@ pub fn isIpv4(s: string) -> bool {
         n < 0
             || n > 255
             || o.length() > 3
-            || (o.length() > 1 && o.startsWith("0"));
+            || (o.length() > 1 && o.startsWith("0"))
     }).length
         == 0;
 }
@@ -533,7 +533,7 @@ fn rfcSpecials() -> string {
 fn isRfcAtom(a: string) -> bool {
     return a != ""
         && chars(a).filter({ c ->
-            isPrintableAscii(c) == false || rfcSpecials().indexOf(c) >= 0;
+            isPrintableAscii(c) == false || rfcSpecials().indexOf(c) >= 0
         }).length
             == 0;
 }
@@ -685,7 +685,7 @@ pub fn isEmoji(s: string) -> bool {
     val cps = unicode.codepoints(s);
     if (cps.length == 0) return false;
     return cps.filter({ c ->
-        isPictographic(c) == false && isEmojiComponent(c) == false;
+        isPictographic(c) == false && isEmojiComponent(c) == false
     }).length
         == 0;
 }
