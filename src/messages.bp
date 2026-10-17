@@ -43,12 +43,16 @@ pub fn builtInOnly() -> MessageSource {
     return MessageSource(locale: { -> "" }, template: { key -> "" });
 }
 
-#[@External.Node("""(function(__S){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.messages = __S; return 0; })($0)""")]
-#[@External.Erlang("""(fun(VaS__) -> persistent_term:put({validation, messages}, VaS__), 0 end)($0)""")]
+#[@external(
+    .Node("""(function(__S){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.messages = __S; return 0; })($0)"""),
+    .Erlang("""(fun(VaS__) -> persistent_term:put({validation, messages}, VaS__), 0 end)($0)"""),
+)]
 declare fn putMessageSource(source: MessageSource) -> i32;
 
-#[@External.Node("""(function(__D){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.messages === null ? __D : __V.messages; })($0)""")]
-#[@External.Erlang("""persistent_term:get({validation, messages}, $0)""")]
+#[@external(
+    .Node("""(function(__D){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.messages === null ? __D : __V.messages; })($0)"""),
+    .Erlang("""persistent_term:get({validation, messages}, $0)"""),
+)]
 declare fn messageSourceOr(fallback: MessageSource) -> MessageSource;
 
 // Install `source` for every later message, in every process. Answers 0.
@@ -70,16 +74,22 @@ pub fn messageSource() -> MessageSource {
 // when never set, so the cell's init literal is unchanged) — and cleared when
 // the call returns.
 
-#[@External.Node("""(function(__S){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = __S; return 0; })($0)""")]
-#[@External.Erlang("""(fun(VaS__) -> put({validation, parse}, VaS__), 0 end)($0)""")]
+#[@external(
+    .Node("""(function(__S){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = __S; return 0; })($0)"""),
+    .Erlang("""(fun(VaS__) -> put({validation, parse}, VaS__), 0 end)($0)"""),
+)]
 declare fn putParseSource(source: MessageSource) -> i32;
 
-#[@External.Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = null; return 0; })()""")]
-#[@External.Erlang("""(fun() -> erase({validation, parse}), 0 end)()""")]
+#[@external(
+    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.parse = null; return 0; })()"""),
+    .Erlang("""(fun() -> erase({validation, parse}), 0 end)()"""),
+)]
 declare fn dropParseSource() -> i32;
 
-#[@External.Node("""(function(__D){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return (__V.parse === undefined || __V.parse === null) ? __D : __V.parse; })($0)""")]
-#[@External.Erlang("""(fun(VaD__) -> case get({validation, parse}) of undefined -> VaD__; VaP__ -> VaP__ end end)($0)""")]
+#[@external(
+    .Node("""(function(__D){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return (__V.parse === undefined || __V.parse === null) ? __D : __V.parse; })($0)"""),
+    .Erlang("""(fun(VaD__) -> case get({validation, parse}) of undefined -> VaD__; VaP__ -> VaP__ end end)($0)"""),
+)]
 declare fn parseSourceOr(fallback: MessageSource) -> MessageSource;
 
 // `source` for the parse that follows, consulted before the installed one —

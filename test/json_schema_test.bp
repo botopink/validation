@@ -172,8 +172,7 @@ test "validation: another type is a $def, and draft-07 calls them definitions" {
 // Which backend is running: the meta-schema check is `node`'s, so the erlang
 // row does not run it (decision 399: commonJS only); the sixteen literals
 // above stay on both. Private, as std's tests keep theirs.
-#[@External.Node("""'commonJS'""")]
-#[@External.Erlang("""<<"erlang">>""")]
+#[@external(.Node("""'commonJS'"""), .Erlang("""<<"erlang">>"""))]
 declare fn hostTarget() -> string;
 
 // `ok`, or the vendored validator's error list, for one document: Ajv's

@@ -213,14 +213,11 @@ pub fn boolToText(b: bool) -> string {
 
 // ── conversions the language has no spelling for (see `derived.bp`) ───────
 
-#[@External.Node("Math.trunc($0)")]
-#[@External.Erlang("trunc($0)")]
+#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI32(n: f64) -> i32;
 
-#[@External.Node("Math.trunc($0)")]
-#[@External.Erlang("trunc($0)")]
+#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI64(n: f64) -> i64;
 
-#[@External.Node("($0)")]
-#[@External.Erlang("float($0)")]
+#[@external(.Node("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI64(n: i64) -> f64;

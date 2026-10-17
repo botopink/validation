@@ -205,16 +205,13 @@ pub fn decodeFloat(input: Json, at: string) -> @Result<f64, ValidationReport> {
 // already known to be whole and in range, as the integer it is. Both targets
 // are asked to convert, never to decide — `isWhole` and the range tests below
 // are botopink.
-#[@External.Node("Math.trunc($0)")]
-#[@External.Erlang("trunc($0)")]
+#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI32(n: f64) -> i32;
 
-#[@External.Node("Math.trunc($0)")]
-#[@External.Erlang("trunc($0)")]
+#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI64(n: f64) -> i64;
 
-#[@External.Node("(Number.isInteger($0))")]
-#[@External.Erlang("(fun(__N) -> __N == trunc(__N) end)($0)")]
+#[@external(.Node("(Number.isInteger($0))"), .Erlang("(fun(__N) -> __N == trunc(__N) end)($0)"))]
 declare fn isWhole(n: f64) -> bool;
 
 // An `i32`: a JSON number with no fraction, inside the range. `1.0` is whole;
@@ -802,12 +799,10 @@ pub fn typeRestated<T>(
 // `null` is left out — absent and `null` decode the same.
 
 // An integer as the `f64` a JSON number is — converting, never deciding.
-#[@External.Node("($0)")]
-#[@External.Erlang("float($0)")]
+#[@external(.Node("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI32(n: i32) -> f64;
 
-#[@External.Node("($0)")]
-#[@External.Erlang("float($0)")]
+#[@external(.Node("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI64(n: i64) -> f64;
 
 pub fn encodeInt(n: i32) -> Json {
