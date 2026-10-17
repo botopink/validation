@@ -25,7 +25,7 @@
 ////     <field>|<code>[|<arg>]*
 ////
 //// Records arrive in declaration order, grouped by field, because the
-//// decorator walks `decl.fields` and then each field's `annotations`. A
+//// decorator walks `compiler.fields(decl)` and then each field's `annotations`. A
 //// constraint argument carrying `;` or `|` is refused at compile time by the
 //// decorator, so the grammar has no escape and needs none.
 

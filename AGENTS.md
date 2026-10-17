@@ -464,8 +464,7 @@ library writes instead.
   arms apart at run time.
 - A decorator body calls a bodied function of its own module, recursion
   included, and a decorator parameter's default is applied (`#[maker]` for
-  `maker(decl, suffix: string = "X")`) — a run-time parameter; a comptime one
-  takes no default (below). The per-marker rules of `#[validated]` are written
+  `maker(decl, suffix: string = "X")`). The per-marker rules of `#[validated]` are written
   out inline for historical reasons, not because they must be.
 - Emitted code names a module through its namespace (`constraints.vNotBlank(…)`).
 - `json.decode` keeps member order, refuses a duplicate member and refuses
@@ -511,10 +510,7 @@ library writes instead.
   functions instead of lambdas, which works in both.
 - A record spread inside a member a decorator adds (`T(..v, f: x)`) is emitted
   `new T(v, x)` on commonJS; the fallback rebuild names every field.
-- A comptime decorator parameter takes no default, and a run-time one whose
-  default is an enum value names "a binding the decorator body cannot read":
-  `#[validated]`'s `form` is a run-time `?Form = null`, the lexeme read from
-  `compiler.annotations(decl)`.
+- `#[validated]`'s `form` is `comptime form: ?Form = null`, read as a value.
 - `Decorator` (decision 268) is an unknown type in a package's module, and a
   decorator's name is assignable to no other parameter type: `#[each("email")]`
   names its marker as text.

@@ -1,9 +1,9 @@
 //// validation — `#[validated]` and the constraint markers. Moved from rakun
 //// front 14's validation member (decision 116 rule 5).
 ////
-//// `#[validated]` on a `type` reflects `decl.fields`, reads each field's
+//// `#[validated]` on a `type` reflects `compiler.fields(decl)`, reads each field's
 //// constraint annotations from `f.annotations` — the way any decorator reads
-//// a field's markers — and gives the type its members (`decl.addMember`,
+//// a field's markers — and gives the type its members (`compiler.addMember`,
 //// decision 216), which travel with it to every importer: the checks,
 ////
 ////     pub fn validate(self: Self) -> ValidationReport      // req.validate()
@@ -49,7 +49,7 @@
 //// grammar lives in `table.bp`, reached by the EMITTED code rather than by this
 //// body. A decorator body does call a bodied function of its module
 //// (`test/platform_test.bp`) — the parse half (`parsing`) is written that way:
-//// a helper takes the declaration's data, never the `@Decl`, and answers text.
+//// a helper takes the declaration's data, never the `expr decl: unknown`, and answers text.
 ////
 //// REFUSAL BEATS A CONSTRAINT THAT COULD NEVER FAIL. Decision 67. A marker on a
 //// field whose type it cannot check is a located compile error, not a row that
@@ -70,10 +70,7 @@ pub type Form { Record, Transparent }
 
 pub val transparent: Form = Form.Transparent;
 
-// LANGUAGE GAP: a comptime parameter takes no default (`comptime form: Form =
-// …` does not parse), so `form` is a run-time parameter — decision 280 (0)
-// writes every decorator parameter `comptime`; the body reads the argument's
-// lexeme (`transparent`) from `decl.annotations`.
+// `form` is `comptime form: ?Form = null`, read as a value.
 pub fn validated(expr decl: unknown, comptime form: ?Form = null) {
     var calls: Array<string> = [];
     var rows: Array<string> = [];
@@ -1074,7 +1071,7 @@ pub fn isoDuration(expr decl: unknown) {
         compiler.fail("#[isoDuration] must annotate a field", at: decl);
 }
 
-// The bound's type is the field's (`@Decl<T>`, decision 280): an `i32` or
+// The bound's type is the field's (`expr decl: T`, decisions 280, 575): an `i32` or
 // `i64` field takes a whole number, an `f64` field any number — a fraction on
 // an integer field is refused at the argument.
 pub fn gt<T>(expr decl: T, comptime value: T) {
@@ -2188,7 +2185,7 @@ fn schemaCommonMembers(name: string) -> Array<string> {
 // variant's own name: a variant's constructor is a name of the module, and a
 // record `Success` beside `Reply.Success` is constructed as the variant.
 //
-// LANGUAGE GAP: `Decl.variants` carries a variant's name and not its payload
+// LANGUAGE GAP: `compiler.variants(decl)` carries a variant's name and not its payload
 // fields or its annotations (`language-gaps.md`), so neither form can tell from here
 // whether a variant has a payload, nor read a marker on it: a payload-less
 // enum whose variant carries fields, and a tagged one whose variant has no
