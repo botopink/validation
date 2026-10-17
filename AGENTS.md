@@ -181,8 +181,8 @@ field held to a closed set, the options comma-joined in one argument).
   `?i64` or `?f64` checks the value when it is present and nothing when it is
   null (`if (v.f != null) …`); on any other optional type it is refused.
 - **Numeric bounds.** The bound of `gt` / `lt` / `multipleOf` is the field's
-  type — `fn gt<T>(comptime decl: @Decl<T>, comptime value: @Expr<T>)` (decision 280
-  (2)): the checker refuses at the argument a fraction on an integer field and
+  type — `fn gt<T>(expr decl: T, comptime value: T)` (decisions 280
+  (2), 575, 576): the checker refuses at the argument a fraction on an integer field and
   a whole literal on an `f64` field (`#[gt(5)]` is written `#[gt(5.0)]`,
   decision 247); the message shows the bound as written (a whole `f64`
   renders `2.0` on erlang and `2` on node). `minValue` / `maxValue` on `f64`
@@ -196,9 +196,11 @@ field held to a closed set, the options comma-joined in one argument).
   `beforeIso` take RFC 3339 text with its zone; `#[isoDatetimePrecision]` needs
   one of `isoDatetime`, `isoDatetimeOffset`, `isoDatetimeLocal` beside it,
   which say the zones it takes.
-- **Every marker parameter is `comptime x: @Expr<T>`**, as decisions 280 (0) and 364 write it: a
-  body reads the argument with `x.value` (known at build), and a marker that never reads a
-  parameter accepts any expression of its type there.
+- **Every marker's first parameter is `expr decl: unknown`** (`expr decl: T` when the
+  argument's type follows the field's, as `gt` / `lt` / `orElse`), and every argument
+  parameter is `comptime x: T` (decisions 575, 576): the body reads the argument as the
+  value itself (known at build), with no `.value`, and a marker that never reads a
+  parameter still takes a value of its type there.
 
 ## The parse half of `#[validated]` — a document in, a record out
 
@@ -251,7 +253,7 @@ JSON Schema the field's; on a type of any other number of fields it is refused.
   held as the variant's one field `value` (`Success(value: ReplySuccess)`).
   Not the variant's own name — a variant's constructor is a name of its module,
   so a record `Success` beside `Reply.Success` is constructed as the variant.
-  `Decl.variants` carries names only (`language-gaps.md`), so a payload a
+  `compiler.variants(decl)` carries names only (`language-gaps.md`), so a payload a
   variant does not have, or a missing payload record, fails where the emitted
   code names it rather than at the annotation.
 - **Every violation, at its path.** Each field is decoded, every violation is
@@ -280,8 +282,8 @@ JSON Schema the field's; on a type of any other number of fields it is refused.
   `f64`, `bool`, an enum's variant by reference (`#[orElse(.Tuna)]` on a `Fish`
   field, emitted `Fish.Tuna` — decision 281, step 11), or their `?T` — or the
   marker is refused at the field; `#[orElseOf(f)]` / `#[fallbackOf(f)]` take the
-  function itself. The markers declare 280's shape (`orElse<T>(decl: @Decl<T>,
-  value: T)`); until decorator arguments are typed (`01-checker` step 24) a
+  function itself. The markers declare 280's shape (`orElse<T>(expr decl: T,
+  comptime value: T)`); until decorator arguments are typed (`01-checker` step 24) a
   variant the enum does not have fails where the emitted code names it. Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
   is not `Dict<string, T>` or twice, `#[rest]` beside `#[stripUnknown]`, a
   default beside `#[rest]` / `#[present]`.
@@ -393,7 +395,7 @@ that change edits rakun's import lines and lands with them.
 spells it: a list is `Array<…>` or `…[]`, a nullable field `?…`. Its members —
 `validate(self) -> ValidationReport` (`req.validate()`), `constraints() ->
 string` (`T.constraints()`) and the parse half above — are declared at the
-application site (`decl.addMember`, decision 216), so the application imports
+application site (`compiler.addMember`, decision 216), so the application imports
 the names the members reference (decision 107 — the leaf is bound):
 
 ```bp
@@ -512,7 +514,7 @@ library writes instead.
 - A comptime decorator parameter takes no default, and a run-time one whose
   default is an enum value names "a binding the decorator body cannot read":
   `#[validated]`'s `form` is a run-time `?Form = null`, the lexeme read from
-  `decl.annotations`.
+  `compiler.annotations(decl)`.
 - `Decorator` (decision 268) is an unknown type in a package's module, and a
   decorator's name is assignable to no other parameter type: `#[each("email")]`
   names its marker as text.
@@ -534,8 +536,9 @@ library writes instead.
   step are written against.
 - There is no `f64` → integer conversion in `std/math` (hence `derived.bp`'s
   conversion cells).
-- A helper cannot take a `@Decl` (the call lowers to a run-time module that
-  does not exist): every marker body calls `decl.fail` itself. Inside a
+- A helper cannot take the declaration (`expr decl: unknown`; the call lowers to a
+  run-time module that does not exist): every marker body calls
+  `compiler.fail(message, at: decl)` itself. Inside a
   decorator body an optional has no `unwrapOr` (`xs.slice(0, 1).join("")`
   instead), and a top-level `val` is not readable from a function a decorator
   calls (`formats.bp`'s character sets are functions).
