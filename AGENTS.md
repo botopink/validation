@@ -181,7 +181,7 @@ field held to a closed set, one argument per option: `#[oneOf("net", "rod")]`, `
   `?i64` or `?f64` checks the value when it is present and nothing when it is
   null (`if (v.f != null) …`); on any other optional type it is refused.
 - **Numeric bounds.** The bound of `gt` / `lt` / `multipleOf` is the field's
-  type — `fn gt<T>(expr decl: T, comptime value: T)` (decisions 280
+  type — `fn gt<T>(syntax decl: T, comptime value: T)` (decisions 280
   (2), 575, 576): the checker refuses at the argument a fraction on an integer field and
   a whole literal on an `f64` field (`#[gt(5)]` is written `#[gt(5.0)]`,
   decision 247); the message shows the bound as written (a whole `f64`
@@ -196,7 +196,7 @@ field held to a closed set, one argument per option: `#[oneOf("net", "rod")]`, `
   `beforeIso` take RFC 3339 text with its zone; `#[isoDatetimePrecision]` needs
   one of `isoDatetime`, `isoDatetimeOffset`, `isoDatetimeLocal` beside it,
   which say the zones it takes.
-- **Every marker's first parameter is `expr decl: unknown`** (`expr decl: T` when the
+- **Every marker's first parameter is `syntax decl: unknown`** (`syntax decl: T` when the
   argument's type follows the field's, as `gt` / `lt` / `orElse`), and every argument
   parameter is `comptime x: T` (decisions 575, 576): the body reads the argument as the
   value itself (known at build), with no `.value`, and a marker that never reads a
@@ -282,7 +282,7 @@ JSON Schema the field's; on a type of any other number of fields it is refused.
   `f64`, `bool`, an enum's variant by reference (`#[orElse(.Tuna)]` on a `Fish`
   field, emitted `Fish.Tuna` — decision 281, step 11), or their `?T` — or the
   marker is refused at the field; `#[orElseOf(f)]` / `#[fallbackOf(f)]` take the
-  function itself. The markers declare 280's shape (`orElse<T>(expr decl: T,
+  function itself. The markers declare 280's shape (`orElse<T>(syntax decl: T,
   comptime value: T)`); until decorator arguments are typed (`01-checker` step 24) a
   variant the enum does not have fails where the emitted code names it. Refused: `#[present]` on a field that is not `?T`, `#[rest]` on one that
   is not `Dict<string, T>` or twice, `#[rest]` beside `#[stripUnknown]`, a
@@ -532,7 +532,7 @@ library writes instead.
   step are written against.
 - There is no `f64` → integer conversion in `std/math` (hence `derived.bp`'s
   conversion cells).
-- A helper cannot take the declaration (`expr decl: unknown`; the call lowers to a
+- A helper cannot take the declaration (`syntax decl: unknown`; the call lowers to a
   run-time module that does not exist): every marker body calls
   `compiler.fail(message, at: decl)` itself. Inside a
   decorator body an optional has no `unwrapOr` (`xs.slice(0, 1).join("")`

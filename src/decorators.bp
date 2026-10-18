@@ -49,7 +49,7 @@
 //// grammar lives in `table.bp`, reached by the EMITTED code rather than by this
 //// body. A decorator body does call a bodied function of its module
 //// (`test/platform_test.bp`) — the parse half (`parsing`) is written that way:
-//// a helper takes the declaration's data, never the `expr decl: unknown`, and answers text.
+//// a helper takes the declaration's data, never the `syntax decl: unknown`, and answers text.
 ////
 //// REFUSAL BEATS A CONSTRAINT THAT COULD NEVER FAIL. Decision 67. A marker on a
 //// field whose type it cannot check is a located compile error, not a row that
@@ -71,7 +71,7 @@ pub type Form { Record, Transparent }
 pub val transparent: Form = Form.Transparent;
 
 // `form` is `comptime form: ?Form = null`, read as a value.
-pub fn validated(expr decl: unknown, comptime form: ?Form = null) {
+pub fn validated(syntax decl: unknown, comptime form: ?Form = null) {
     var calls: Array<string> = [];
     var rows: Array<string> = [];
     var problem = "";
@@ -398,23 +398,23 @@ pub fn validated(expr decl: unknown, comptime form: ?Form = null) {
 // and a marker that looks like a removed effect is a trap. The temporal markers
 // are `#[pastDate]` and `#[futureDate]`.
 
-pub fn notNull(expr decl: unknown) {
+pub fn notNull(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[notNull] must annotate a field", at: decl);
 }
 
-pub fn notBlank(expr decl: unknown) {
+pub fn notBlank(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[notBlank] must annotate a field", at: decl);
 }
 
-pub fn notEmpty(expr decl: unknown) {
+pub fn notEmpty(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[notEmpty] must annotate a field", at: decl);
 }
 
 pub fn sizeBetween(
-    expr decl: unknown,
+    syntax decl: unknown,
     comptime min: i32,
     comptime max: i32,
 ) {
@@ -429,27 +429,27 @@ pub fn sizeBetween(
         );
 }
 
-pub fn minValue(expr decl: unknown, comptime min: i32) {
+pub fn minValue(syntax decl: unknown, comptime min: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[minValue] must annotate a field", at: decl);
 }
 
-pub fn maxValue(expr decl: unknown, comptime max: i32) {
+pub fn maxValue(syntax decl: unknown, comptime max: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[maxValue] must annotate a field", at: decl);
 }
 
-pub fn positive(expr decl: unknown) {
+pub fn positive(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[positive] must annotate a field", at: decl);
 }
 
-pub fn positiveOrZero(expr decl: unknown) {
+pub fn positiveOrZero(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[positiveOrZero] must annotate a field", at: decl);
 }
 
-pub fn email(expr decl: unknown) {
+pub fn email(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[email] must annotate a field", at: decl);
 }
@@ -458,7 +458,7 @@ pub fn email(expr decl: unknown) {
 // table's blob separates records with `;` and fields with `|`. A pattern
 // carrying either would make the table unreadable, so it is refused here
 // rather than escaped there — the grammar has no escape and needs none.
-pub fn pattern(expr decl: unknown, comptime regex: string) {
+pub fn pattern(syntax decl: unknown, comptime regex: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[pattern] must annotate a field", at: decl);
     if (regex == "")
@@ -475,12 +475,12 @@ pub fn pattern(expr decl: unknown, comptime regex: string) {
         );
 }
 
-pub fn pastDate(expr decl: unknown) {
+pub fn pastDate(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[pastDate] must annotate a field", at: decl);
 }
 
-pub fn futureDate(expr decl: unknown) {
+pub fn futureDate(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[futureDate] must annotate a field", at: decl);
 }
@@ -490,7 +490,7 @@ pub fn futureDate(expr decl: unknown) {
 // load, and a decorator body has no whole-program view — so an unregistered
 // name is a violation at the first validation call, coded `unknownConstraint`,
 // and never a pass.
-pub fn constraint(expr decl: unknown, comptime name: string) {
+pub fn constraint(syntax decl: unknown, comptime name: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[constraint] must annotate a field", at: decl);
     if (name == "") compiler.fail("#[constraint]: the name may not be empty", at: decl);
@@ -769,7 +769,7 @@ fn textArgProblem(marker: string, what: string, text: string) -> string {
     return "";
 }
 
-pub fn minLength(expr decl: unknown, comptime min: i32) {
+pub fn minLength(syntax decl: unknown, comptime min: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[minLength] must annotate a field", at: decl);
     if (min < 1)
@@ -779,176 +779,176 @@ pub fn minLength(expr decl: unknown, comptime min: i32) {
         );
 }
 
-pub fn maxLength(expr decl: unknown, comptime max: i32) {
+pub fn maxLength(syntax decl: unknown, comptime max: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[maxLength] must annotate a field", at: decl);
     if (max < 0)
         compiler.fail("#[maxLength]: the upper bound may not be negative", at: decl);
 }
 
-pub fn length(expr decl: unknown, comptime length: i32) {
+pub fn length(syntax decl: unknown, comptime length: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[length] must annotate a field", at: decl);
     if (length < 0)
         compiler.fail("#[length]: the length may not be negative", at: decl);
 }
 
-pub fn startsWith(expr decl: unknown, comptime prefix: string) {
+pub fn startsWith(syntax decl: unknown, comptime prefix: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[startsWith] must annotate a field", at: decl);
     val problem = textArgProblem("startsWith", "prefix", prefix);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn endsWith(expr decl: unknown, comptime suffix: string) {
+pub fn endsWith(syntax decl: unknown, comptime suffix: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[endsWith] must annotate a field", at: decl);
     val problem = textArgProblem("endsWith", "suffix", suffix);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn includes(expr decl: unknown, comptime substring: string) {
+pub fn includes(syntax decl: unknown, comptime substring: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[includes] must annotate a field", at: decl);
     val problem = textArgProblem("includes", "substring", substring);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn uppercase(expr decl: unknown) {
+pub fn uppercase(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[uppercase] must annotate a field", at: decl);
 }
 
-pub fn lowercase(expr decl: unknown) {
+pub fn lowercase(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[lowercase] must annotate a field", at: decl);
 }
 
-pub fn emailHtml5(expr decl: unknown) {
+pub fn emailHtml5(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[emailHtml5] must annotate a field", at: decl);
 }
 
-pub fn emailRfc5322(expr decl: unknown) {
+pub fn emailRfc5322(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[emailRfc5322] must annotate a field", at: decl);
 }
 
-pub fn emailUnicode(expr decl: unknown) {
+pub fn emailUnicode(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[emailUnicode] must annotate a field", at: decl);
 }
 
-pub fn uuid(expr decl: unknown) {
+pub fn uuid(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[uuid] must annotate a field", at: decl);
 }
 
-pub fn uuidV(expr decl: unknown, comptime version: i32) {
+pub fn uuidV(syntax decl: unknown, comptime version: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[uuidV] must annotate a field", at: decl);
     if (version < 1 || version > 8)
         compiler.fail("#[uuidV]: RFC 9562 versions are 1 to 8", at: decl);
 }
 
-pub fn guid(expr decl: unknown) {
+pub fn guid(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[guid] must annotate a field", at: decl);
 }
 
-pub fn url(expr decl: unknown) {
+pub fn url(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[url] must annotate a field", at: decl);
 }
 
-pub fn urlHost(expr decl: unknown, comptime hostname: string) {
+pub fn urlHost(syntax decl: unknown, comptime hostname: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[urlHost] must annotate a field", at: decl);
     val problem = textArgProblem("urlHost", "pattern", hostname);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn urlProtocol(expr decl: unknown, comptime protocol: string) {
+pub fn urlProtocol(syntax decl: unknown, comptime protocol: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[urlProtocol] must annotate a field", at: decl);
     val problem = textArgProblem("urlProtocol", "pattern", protocol);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn httpUrl(expr decl: unknown) {
+pub fn httpUrl(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[httpUrl] must annotate a field", at: decl);
 }
 
-pub fn hostname(expr decl: unknown) {
+pub fn hostname(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[hostname] must annotate a field", at: decl);
 }
 
-pub fn e164(expr decl: unknown) {
+pub fn e164(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[e164] must annotate a field", at: decl);
 }
 
-pub fn emoji(expr decl: unknown) {
+pub fn emoji(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[emoji] must annotate a field", at: decl);
 }
 
-pub fn base64(expr decl: unknown) {
+pub fn base64(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[base64] must annotate a field", at: decl);
 }
 
-pub fn base64url(expr decl: unknown) {
+pub fn base64url(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[base64url] must annotate a field", at: decl);
 }
 
-pub fn hex(expr decl: unknown) {
+pub fn hex(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[hex] must annotate a field", at: decl);
 }
 
-pub fn jwt(expr decl: unknown) {
+pub fn jwt(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[jwt] must annotate a field", at: decl);
 }
 
-pub fn jwtAlg(expr decl: unknown, comptime alg: string) {
+pub fn jwtAlg(syntax decl: unknown, comptime alg: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[jwtAlg] must annotate a field", at: decl);
     val problem = textArgProblem("jwtAlg", "algorithm", alg);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn nanoid(expr decl: unknown) {
+pub fn nanoid(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[nanoid] must annotate a field", at: decl);
 }
 
-pub fn cuid(expr decl: unknown) {
+pub fn cuid(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[cuid] must annotate a field", at: decl);
 }
 
-pub fn cuid2(expr decl: unknown) {
+pub fn cuid2(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[cuid2] must annotate a field", at: decl);
 }
 
-pub fn ulid(expr decl: unknown) {
+pub fn ulid(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ulid] must annotate a field", at: decl);
 }
 
-pub fn ipv4(expr decl: unknown) {
+pub fn ipv4(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ipv4] must annotate a field", at: decl);
 }
 
-pub fn ipv6(expr decl: unknown) {
+pub fn ipv6(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ipv6] must annotate a field", at: decl);
 }
 
-pub fn mac(expr decl: unknown) {
+pub fn mac(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[mac] must annotate a field", at: decl);
 }
 
 // One character that is not a hex digit — a delimiter that were one would
 // make `00` ambiguous with its neighbours.
-pub fn macDelimiter(expr decl: unknown, comptime delimiter: string) {
+pub fn macDelimiter(syntax decl: unknown, comptime delimiter: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[macDelimiter] must annotate a field", at: decl);
     val problem = textArgProblem("macDelimiter", "delimiter", delimiter);
@@ -961,27 +961,27 @@ pub fn macDelimiter(expr decl: unknown, comptime delimiter: string) {
         );
 }
 
-pub fn cidrv4(expr decl: unknown) {
+pub fn cidrv4(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[cidrv4] must annotate a field", at: decl);
 }
 
-pub fn cidrv6(expr decl: unknown) {
+pub fn cidrv6(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[cidrv6] must annotate a field", at: decl);
 }
 
-pub fn creditCard(expr decl: unknown) {
+pub fn creditCard(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[creditCard] must annotate a field", at: decl);
 }
 
-pub fn currencyCode(expr decl: unknown) {
+pub fn currencyCode(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[currencyCode] must annotate a field", at: decl);
 }
 
-pub fn iban(expr decl: unknown) {
+pub fn iban(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[iban] must annotate a field", at: decl);
 }
 
@@ -993,7 +993,7 @@ fn isHashAlgorithm(a: string) -> bool {
         || a == "sha512";
 }
 
-pub fn hash(expr decl: unknown, comptime algorithm: string) {
+pub fn hash(syntax decl: unknown, comptime algorithm: string) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[hash] must annotate a field", at: decl);
     if (isHashAlgorithm(algorithm) == false)
         compiler.fail(
@@ -1003,7 +1003,7 @@ pub fn hash(expr decl: unknown, comptime algorithm: string) {
 }
 
 pub fn hashEnc(
-    expr decl: unknown,
+    syntax decl: unknown,
     comptime algorithm: string,
     comptime encoding: string,
 ) {
@@ -1020,18 +1020,18 @@ pub fn hashEnc(
         compiler.fail("#[hashEnc]: the encoding is one of hex, base64, base64url", at: decl);
 }
 
-pub fn isoDate(expr decl: unknown) {
+pub fn isoDate(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoDate] must annotate a field", at: decl);
 }
 
-pub fn isoTime(expr decl: unknown) {
+pub fn isoTime(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoTime] must annotate a field", at: decl);
 }
 
 // -1 is `HH:MM`, 0 whole seconds, n that many fraction digits (to 9).
-pub fn isoTimePrecision(expr decl: unknown, comptime precision: i32) {
+pub fn isoTimePrecision(syntax decl: unknown, comptime precision: i32) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoTimePrecision] must annotate a field", at: decl);
     if (precision < 0 - 1 || precision > 9)
@@ -1041,23 +1041,23 @@ pub fn isoTimePrecision(expr decl: unknown, comptime precision: i32) {
         );
 }
 
-pub fn isoDatetime(expr decl: unknown) {
+pub fn isoDatetime(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoDatetime] must annotate a field", at: decl);
 }
 
-pub fn isoDatetimeOffset(expr decl: unknown) {
+pub fn isoDatetimeOffset(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoDatetimeOffset] must annotate a field", at: decl);
 }
 
-pub fn isoDatetimeLocal(expr decl: unknown) {
+pub fn isoDatetimeLocal(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoDatetimeLocal] must annotate a field", at: decl);
 }
 
 pub fn isoDatetimePrecision(
-    expr decl: unknown,
+    syntax decl: unknown,
     comptime precision: i32,
 ) {
     if (compiler.kind(decl) != DeclKind.Field)
@@ -1069,52 +1069,52 @@ pub fn isoDatetimePrecision(
         );
 }
 
-pub fn isoDuration(expr decl: unknown) {
+pub fn isoDuration(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[isoDuration] must annotate a field", at: decl);
 }
 
-// The bound's type is the field's (`expr decl: T`, decisions 280, 575): an `i32` or
+// The bound's type is the field's (`syntax decl: T`, decisions 280, 575): an `i32` or
 // `i64` field takes a whole number, an `f64` field any number — a fraction on
 // an integer field is refused at the argument.
-pub fn gt<T>(expr decl: T, comptime value: T) {
+pub fn gt<T>(syntax decl: T, comptime value: T) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[gt] must annotate a field", at: decl);
 }
 
-pub fn lt<T>(expr decl: T, comptime value: T) {
+pub fn lt<T>(syntax decl: T, comptime value: T) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[lt] must annotate a field", at: decl);
 }
 
-pub fn negative(expr decl: unknown) {
+pub fn negative(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[negative] must annotate a field", at: decl);
 }
 
-pub fn negativeOrZero(expr decl: unknown) {
+pub fn negativeOrZero(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[negativeOrZero] must annotate a field", at: decl);
 }
 
-pub fn multipleOf<T>(expr decl: T, comptime value: T) {
+pub fn multipleOf<T>(syntax decl: T, comptime value: T) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[multipleOf] must annotate a field", at: decl);
     if (value <= 0)
         compiler.fail("#[multipleOf]: the step must be greater than 0", at: decl);
 }
 
-pub fn safeInt(expr decl: unknown) {
+pub fn safeInt(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[safeInt] must annotate a field", at: decl);
 }
 
-pub fn float32(expr decl: unknown) {
+pub fn float32(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[float32] must annotate a field", at: decl);
 }
 
 // The bound is RFC 3339 text with its zone (`Z` or `±HH:MM`), what
 // `clock.parseIso8601` reads.
-pub fn afterIso(expr decl: unknown, comptime instant: string) {
+pub fn afterIso(syntax decl: unknown, comptime instant: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[afterIso] must annotate a field", at: decl);
     if (isIsoDatetimeOffset(instant) == false)
@@ -1124,7 +1124,7 @@ pub fn afterIso(expr decl: unknown, comptime instant: string) {
         );
 }
 
-pub fn beforeIso(expr decl: unknown, comptime instant: string) {
+pub fn beforeIso(syntax decl: unknown, comptime instant: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[beforeIso] must annotate a field", at: decl);
     if (isIsoDatetimeOffset(instant) == false)
@@ -1141,14 +1141,14 @@ pub fn beforeIso(expr decl: unknown, comptime instant: string) {
 // holds a text field to a closed set, one argument per option.
 
 pub fn literal(
-    expr decl: unknown,
+    syntax decl: unknown,
     comptime expected: string | i32 | bool,
 ) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[literal] must annotate a field", at: decl);
 }
 
-pub fn oneOf(expr decl: unknown, comptime ..options: string[]) {
+pub fn oneOf(syntax decl: unknown, comptime ..options: string[]) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[oneOf] must annotate a field", at: decl);
     options.forEach({ o ->
@@ -2969,7 +2969,7 @@ fn helperFns(text: string) -> Array<string> {
 
 // `#[tag("status")]` beside `#[validated]` on an enum: the member that names the
 // variant. `#[validated]` reads it.
-pub fn tag(expr decl: unknown, comptime member: string) {
+pub fn tag(syntax decl: unknown, comptime member: string) {
     if (compiler.kind(decl) != DeclKind.Type) compiler.fail("#[tag] must annotate a type", at: decl);
     val problem = textArgProblem("tag", "member name", member);
     if (problem != "") compiler.fail(problem, at: decl);
@@ -2977,7 +2977,7 @@ pub fn tag(expr decl: unknown, comptime member: string) {
 
 // `#[exhaustive]` on a `Dict<K, V>` field whose key is a `#[validated]` enum:
 // every variant must be a key. `#[validated]` reads it.
-pub fn exhaustive(expr decl: unknown) {
+pub fn exhaustive(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[exhaustive] must annotate a field", at: decl);
 }
@@ -2989,20 +2989,20 @@ pub fn exhaustive(expr decl: unknown) {
 
 // `z.object` (strips): the undeclared members are dropped — the type says so.
 // The default refuses them (decision 144).
-pub fn stripUnknown(expr decl: unknown) {
+pub fn stripUnknown(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Type)
         compiler.fail("#[stripUnknown] must annotate a type", at: decl);
 }
 
 // `z.looseObject` / `.catchall(T)`: a `Dict<string, T>` field holding every
 // undeclared member, decoded as `T`, in document order.
-pub fn rest(expr decl: unknown) {
+pub fn rest(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[rest] must annotate a field", at: decl);
 }
 
 // `.exactOptional()`: on a `?T` field, the key may be left out; a key holding
 // `null` is refused.
-pub fn present(expr decl: unknown) {
+pub fn present(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[present] must annotate a field", at: decl);
 }
@@ -3010,7 +3010,7 @@ pub fn present(expr decl: unknown) {
 // `.default(v)`: an absent (or `null`) key takes the value, of the field's
 // type — a literal, or an enum's variant by reference (`#[orElse(.Tuna)]`,
 // decisions 280 (2), 281).
-pub fn orElse<T>(expr decl: T, comptime value: T) {
+pub fn orElse<T>(syntax decl: T, comptime value: T) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[orElse] must annotate a field", at: decl);
 }
@@ -3018,7 +3018,7 @@ pub fn orElse<T>(expr decl: T, comptime value: T) {
 // `.default(fn)`: an absent key takes what the function answers, called per
 // parse — the function itself, not its name (decision 281).
 pub fn orElseOf<T>(
-    expr decl: T,
+    syntax decl: T,
     comptime function: fn() -> T,
 ) {
     if (compiler.kind(decl) != DeclKind.Field)
@@ -3028,14 +3028,14 @@ pub fn orElseOf<T>(
 // `.catch(v)`: a value that does not decode, or fails its checks, is replaced
 // by the value — of the field's type, as `#[orElse]`'s — and no violation is
 // recorded for it.
-pub fn fallback<T>(expr decl: T, comptime value: T) {
+pub fn fallback<T>(syntax decl: T, comptime value: T) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[fallback] must annotate a field", at: decl);
 }
 
 // `.catch(fn)`: the same, with what the function answers.
 pub fn fallbackOf<T>(
-    expr decl: T,
+    syntax decl: T,
     comptime function: fn() -> T,
 ) {
     if (compiler.kind(decl) != DeclKind.Field)
@@ -3048,34 +3048,34 @@ pub fn fallbackOf<T>(
 // number by std's numeral grammar, a `bool` by the stringbool set, a `string`
 // from a number or a boolean; an `i64` beside `#[isoDatetime]` reads an
 // instant as epoch milliseconds.
-pub fn coerce(expr decl: unknown) {
+pub fn coerce(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[coerce] must annotate a field", at: decl);
 }
 
 // `z.stringbool()`: a `bool` field read from the stringbool set's text.
-pub fn stringbool(expr decl: unknown) {
+pub fn stringbool(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[stringbool] must annotate a field", at: decl);
 }
 
 // The transforms of a text field, applied in the order the field writes them,
 // before its checks run.
-pub fn trim(expr decl: unknown) {
+pub fn trim(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[trim] must annotate a field", at: decl);
 }
 
-pub fn lowercased(expr decl: unknown) {
+pub fn lowercased(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[lowercased] must annotate a field", at: decl);
 }
 
-pub fn uppercased(expr decl: unknown) {
+pub fn uppercased(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[uppercased] must annotate a field", at: decl);
 }
 
-pub fn normalized(expr decl: unknown, comptime form: string) {
+pub fn normalized(syntax decl: unknown, comptime form: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[normalized] must annotate a field", at: decl);
     if (form != "NFC"
@@ -3085,7 +3085,7 @@ pub fn normalized(expr decl: unknown, comptime form: string) {
         compiler.fail("#[normalized]: the form is one of NFC, NFD, NFKC, NFKD", at: decl);
 }
 
-pub fn normalizedUrl(expr decl: unknown) {
+pub fn normalizedUrl(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[normalizedUrl] must annotate a field", at: decl);
 }
@@ -3094,7 +3094,7 @@ pub fn normalizedUrl(expr decl: unknown) {
 
 // `.min(8, "Too short!")`: the text the marker just before it reports instead
 // of its template.
-pub fn message(expr decl: unknown, comptime text: string) {
+pub fn message(syntax decl: unknown, comptime text: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[message] must annotate a field", at: decl);
     val problem = textArgProblem("message", "text", text);
@@ -3102,7 +3102,7 @@ pub fn message(expr decl: unknown, comptime text: string) {
 }
 
 // `z.string("Not a string!")`: the text the field's `invalidType` reports.
-pub fn typeMessage(expr decl: unknown, comptime text: string) {
+pub fn typeMessage(syntax decl: unknown, comptime text: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[typeMessage] must annotate a field", at: decl);
     val problem = textArgProblem("typeMessage", "text", text);
@@ -3111,7 +3111,7 @@ pub fn typeMessage(expr decl: unknown, comptime text: string) {
 
 // `{ abort: true }`: the field's checks run in the order written, and only the
 // first that fails is reported.
-pub fn stopOnFirst(expr decl: unknown) {
+pub fn stopOnFirst(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[stopOnFirst] must annotate a field", at: decl);
 }
@@ -3121,7 +3121,7 @@ pub fn stopOnFirst(expr decl: unknown) {
 // `z.preprocess(f, …)`: the field's raw document value goes through `f` before
 // it is decoded.
 pub fn preprocess(
-    expr decl: unknown,
+    syntax decl: unknown,
     comptime f: fn(input: Json) -> Json,
 ) {
     if (compiler.kind(decl) != DeclKind.Field)
@@ -3133,7 +3133,7 @@ pub fn preprocess(
 // rule, the field it reports at, a message and a code (decision 280) — typed
 // decorator arguments, which `01-checker` step 24 brings.
 pub fn check<T>(
-    expr decl: T,
+    syntax decl: T,
     comptime rule: fn(v: T) -> bool,
 ) {
     if (compiler.kind(decl) == DeclKind.Type)
@@ -3149,7 +3149,7 @@ pub fn check<T>(
 // `Set<T>`, each item's violation at its own path (`guests[1]`). One marker per
 // `#[each]`, written again for the next. The marker is named, not written as text: `#[each(email)]`; a decorator that
 // is no marker is refused by `#[validated]`.
-pub fn each(expr decl: unknown, comptime marker: Decorator) {
+pub fn each(syntax decl: unknown, comptime marker: Decorator) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[each] must annotate a field", at: decl);
 }
 
@@ -3158,35 +3158,35 @@ pub fn each(expr decl: unknown, comptime marker: Decorator) {
 // `.meta({ title, description, examples, deprecated })` on a type or a field:
 // annotations of its JSON Schema node. `#[validated]` reads them.
 
-pub fn title(expr decl: unknown, comptime text: string) {
+pub fn title(syntax decl: unknown, comptime text: string) {
     if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[title] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("title", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn describe(expr decl: unknown, comptime text: string) {
+pub fn describe(syntax decl: unknown, comptime text: string) {
     if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[describe] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("describe", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn example(expr decl: unknown, comptime text: string) {
+pub fn example(syntax decl: unknown, comptime text: string) {
     if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[example] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("example", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
-pub fn deprecated(expr decl: unknown) {
+pub fn deprecated(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[deprecated] must annotate a type or a field", at: decl);
 }
 
 // The id a registry knows the type by — `schemaIdOf<TypeName>()`, what
 // `spi.registerSchema` is handed; the type's name when it carries none.
-pub fn schemaId(expr decl: unknown, comptime id: string) {
+pub fn schemaId(syntax decl: unknown, comptime id: string) {
     if (compiler.kind(decl) != DeclKind.Type)
         compiler.fail("#[schemaId] must annotate a type", at: decl);
     val problem = metaTextProblem("schemaId", id);
@@ -3195,7 +3195,7 @@ pub fn schemaId(expr decl: unknown, comptime id: string) {
 
 // `unrepresentable: "throw"`: every field of the type has a JSON Schema
 // keyword for each of its markers, or the type is refused, naming the field.
-pub fn jsonSchema(expr decl: unknown) {
+pub fn jsonSchema(syntax decl: unknown) {
     if (compiler.kind(decl) != DeclKind.Type)
         compiler.fail("#[jsonSchema] must annotate a type", at: decl);
 }
