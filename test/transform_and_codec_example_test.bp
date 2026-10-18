@@ -6,8 +6,8 @@
 //
 //   z.preprocess(fn, z.int())                         -> #[preprocess(fn)]
 //   z.int().refine(isEven)                            -> #[check(isEven)]
-//   z.array(z.email())                                -> #[each("email")]
-//   z.array(z.string().toLowerCase())                 -> #[each("lowercased")]
+//   z.array(z.email())                                -> #[each(email)]
+//   z.array(z.string().toLowerCase())                 -> #[each(lowercased)]
 //   schema.encode(value)                              -> T.encode(value)
 //
 // Decision 306's shape: what only a value could say is a field marker. Not here
@@ -25,7 +25,7 @@
 //
 // Target: both.
 
-import {decorators.validated, decorators.minLength, decorators.each, decorators.preprocess, decorators.check};
+import {decorators.validated, decorators.minLength, decorators.each, decorators.email, decorators.lowercased, decorators.preprocess, decorators.check};
 import {derived};
 import {report.ValidationReport, report.Violation};
 import {constraints.vMinLength, constraints.vEmail, constraints.vEach, constraints.vCheck, table.constraintTableJson};
@@ -53,9 +53,7 @@ fn isEven(n: i32) -> bool {
 #[validated]
 pub type Invite(
     #[minLength(1)] title: string,
-    // LANGUAGE GAP: a decorator's name is not a value a package's decorator
-    // can take (`Decorator` is unknown there), so the marker is named as text.
-    #[each("email")] #[each("lowercased")] guests: Array<string>,
+    #[each(email)] #[each(lowercased)] guests: Array<string>,
     #[preprocess(digitsToNumber)] seats: i32,
     #[check(isEven)] tables: i32,
 )

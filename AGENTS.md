@@ -170,7 +170,7 @@ in `formats.bp`), numbers (`gt`, `lt`, `negative`, `negativeOrZero`,
 `multipleOf`, `safeInt`, `float32`) and date bounds (`afterIso`, `beforeIso`) —
 and the two of step 4: `literal` (a `string`, `i32` or `bool` field held to one
 value; the argument's lexeme is read as the field's type) and `oneOf` (a text
-field held to a closed set, the options comma-joined in one argument).
+field held to a closed set, one argument per option: `#[oneOf("net", "rod")]`, `comptime ..options: string[]`).
 
 - **Field types.** Every marker names the types it checks; on any other it is a
   located compile error (`test/refusal_test.bp`: one row per marker, and the
@@ -313,7 +313,7 @@ JSON Schema the field's; on a type of any other number of fields it is refused.
   of a nested record are its own decoder's, not re-run by the outer encode.
   `#[preprocess(f)]` (`f: fn(input: Json) -> Json`) rewrites the field's raw
   value before it is decoded; `#[check(rule)]` on a field (`rule: fn(v: T) ->
-  bool`) is a `custom` violation when the rule answers `false`; `#[each("m")]`
+  bool`) is a `custom` violation when the rule answers `false`; `#[each(m)]`
   applies one marker — a parameterless check, or a transform on an
   `Array<string>` — to every item of an `Array<T>` / `Set<T>`, each violation at
   `field[i]`. A decorator argument is not typed yet (`01-checker` step 24), so
@@ -511,9 +511,9 @@ library writes instead.
 - A record spread inside a member a decorator adds (`T(..v, f: x)`) is emitted
   `new T(v, x)` on commonJS; the fallback rebuild names every field.
 - `#[validated]`'s `form` is `comptime form: ?Form = null`, read as a value.
-- `Decorator` (decision 268) is an unknown type in a package's module, and a
-  decorator's name is assignable to no other parameter type: `#[each("email")]`
-  names its marker as text.
+- `#[each]` takes its marker as a `Decorator` (decision 268): `#[each(email)]`, the
+  name imported like any other decorator; one that is no marker is refused by
+  `#[validated]`.
 - A decorator body whose lambda holds many locals overflows the comptime stack
   (`wasm3: [trap] stack overflow`): the per-field work of the parse half is in
   helpers (`fieldNode`) taking plain data.

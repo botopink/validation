@@ -91,7 +91,10 @@ pub fn validated(expr decl: unknown, comptime form: ?Form = null) {
             val read = if (nullable) "(" + base + " ?? " + zero + ")" else base;
             val q = "\"" + f.name + "\"";
             val raw = a.args.join(", ");
-            val bare = a.args.join("|").replaceAll("\"", "");
+            val bare = if (a.name == "oneOf")
+                a.args.map({ o -> unquoted(o) }).join(",")
+            else
+                a.args.join("|").replaceAll("\"", "");
             val n = a.name;
             val isText = t == "string";
             val isList = t.startsWith("Array<") || t.endsWith("[]");
@@ -730,7 +733,7 @@ fn markerRule(
     }
     if (n == "oneOf") {
         if (t != "string") return refusedOn("`string`", declared);
-        return "vOneOf(" + q + ", " + read + ", " + first + ")";
+        return "vOneOf(" + q + ", " + read + ", " + oneOfJoined(args) + ")";
     }
     if (n == "afterIso" || n == "beforeIso") {
         if (t != "i64")
@@ -1134,9 +1137,8 @@ pub fn beforeIso(expr decl: unknown, comptime instant: string) {
 // ── step 4: literals, closed sets ───────────────────────────────────────────
 //
 // `#[literal(x)]` holds a `string`, `i32` or `bool` field to one value (the
-// argument's lexeme is read as the field's type); `#[oneOf("a,b,c")]` holds a
-// text field to a closed set, comma-joined because a decorator argument is one
-// raw lexeme (`language-gaps.md`).
+// argument's lexeme is read as the field's type); `#[oneOf("a", "b", "c")]`
+// holds a text field to a closed set, one argument per option.
 
 pub fn literal(
     expr decl: unknown,
@@ -1146,22 +1148,27 @@ pub fn literal(
         compiler.fail("#[literal] must annotate a field", at: decl);
 }
 
-pub fn oneOf(expr decl: unknown, comptime options: string) {
+pub fn oneOf(expr decl: unknown, comptime ..options: string[]) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[oneOf] must annotate a field", at: decl);
-    val problem = textArgProblem("oneOf", "options", options);
-    if (problem != "") compiler.fail(problem, at: decl);
-    val parts = options.split(",");
-    if (parts.filter({ o -> o == "" }).length > 0)
+    options.forEach({ o ->
+        if (o == "")
+            compiler.fail("#[oneOf]: an option may not be empty", at: decl);
+        val problem = textArgProblem("oneOf", "option", o);
+        if (problem != "") compiler.fail(problem, at: decl);
+        if (o.indexOf(",") >= 0)
+            compiler.fail("#[oneOf]: an option may not contain a comma", at: decl);
+    });
+    if (options.length < 2)
         compiler.fail(
-            "#[oneOf]: an option may not be empty - write the options comma-joined, as \"net,rod,trap\"",
+            "#[oneOf]: one option is a #[literal] - write two or more",
             at: decl,
         );
-    if (parts.length < 2)
-        compiler.fail(
-            "#[oneOf]: one option is a #[literal] - write two or more, comma-joined",
-            at: decl,
-        );
+}
+
+// The options as `vOneOf` takes them: one comma-joined text.
+fn oneOfJoined(args: Array<string>) -> string {
+    return "\"" + args.map({ o -> unquoted(o) }).join(",") + "\"";
 }
 
 // Every marker `#[validated]` reads, in the order of this file — what
@@ -1882,7 +1889,7 @@ fn markerKeywords(n: string, args: Array<string>, t: string) -> Array<string> {
         return [
             jsKw(
                 "enum",
-                jsArr(unquoted(first).split(",").map({ o -> jsStr(o) })),
+                jsArr(args.map({ o -> jsStr(unquoted(o)) })),
             ),
         ];
     val format = formatOf(n);
@@ -3140,15 +3147,9 @@ pub fn check<T>(
 
 // `z.array(z.email())`: a marker applied to every item of an `Array<T>` or a
 // `Set<T>`, each item's violation at its own path (`guests[1]`). One marker per
-// `#[each]`, written again for the next; a marker that takes arguments waits on
-// the variadic parameter (decision 267).
-//
-// LANGUAGE GAP: `Decorator` (decision 268) is an unknown type in a package
-// module reached by `mod` (`unknown type 'Decorator'`), and a decorator's name
-// is assignable to no other parameter type (`argument 1 must be unknown`), so
-// the marker is named as text — `#[each("email")]` — until it is; a name that
+// `#[each]`, written again for the next. The marker is named, not written as text: `#[each(email)]`; a decorator that
 // is no marker is refused by `#[validated]`.
-pub fn each(expr decl: unknown, comptime marker: string) {
+pub fn each(expr decl: unknown, comptime marker: Decorator) {
     if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[each] must annotate a field", at: decl);
 }
 
