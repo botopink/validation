@@ -11,7 +11,7 @@
 
 import {constraints};
 import {report.Violation};
-import {json, json.Json, unicode, url} from "std";
+import {json, json.Json, unicode, url, compiler} from "std";
 
 // ── a generic record holding a function, with a generic method ──────────────
 

@@ -59,7 +59,7 @@
 //// is designed out at compile time.
 
 import {formats.isIsoDatetimeOffset, formats.nanoidPattern, formats.cuid2Pattern, formats.ulidPattern, formats.e164Pattern};
-import {json.Json} from "std";
+import {json.Json, compiler, compiler.DeclAnnotation, compiler.DeclKind, compiler.Field} from "std";
 
 // ── `#[validated]` ──────────────────────────────────────────────────────────
 
