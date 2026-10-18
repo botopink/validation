@@ -78,7 +78,7 @@ pub type Team(
     members: Array<Member>,
 )
 
-fn teamCodes(r: @Result<Team, ValidationReport>) -> string {
+fn teamCodes(r: Result<Team, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -91,7 +91,7 @@ fn fresh() -> i32 {
     return setMessageSource(builtInOnly());
 }
 
-fn signupCodes(r: @Result<Signup, ValidationReport>) -> string {
+fn signupCodes(r: Result<Signup, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -100,7 +100,7 @@ fn signupCodes(r: @Result<Signup, ValidationReport>) -> string {
     };
 }
 
-fn orderCodes(r: @Result<Order, ValidationReport>) -> string {
+fn orderCodes(r: Result<Order, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -109,7 +109,7 @@ fn orderCodes(r: @Result<Order, ValidationReport>) -> string {
     };
 }
 
-fn numberCodes(r: @Result<Numbers, ValidationReport>) -> string {
+fn numberCodes(r: Result<Numbers, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -118,7 +118,7 @@ fn numberCodes(r: @Result<Numbers, ValidationReport>) -> string {
     };
 }
 
-fn signupMessages(r: @Result<Signup, ValidationReport>) -> string {
+fn signupMessages(r: Result<Signup, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -506,7 +506,7 @@ pub type Settings(
     #[fallbackOf(noScore)] score: i64,
 )
 
-fn codesOf<T>(r: @Result<T, ValidationReport>) -> string {
+fn codesOf<T>(r: Result<T, ValidationReport>) -> string {
     return derived
         .violationsOf(r)
         .map({ v -> v.field + ":" + v.code })

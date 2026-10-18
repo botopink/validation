@@ -23,7 +23,7 @@
 //// validation call.
 
 import {derived.jsonText, derived.refsRenamed, derived.refsPrefixed};
-import {json, json.Json} from "std";
+import {json, json.Json, compiler} from "std";
 import {report.Violation, report.violation, report.noViolation, report.oneViolation};
 import {messages.message, messages.builtInTemplate, messages.arg, messages.noArgs};
 
@@ -44,8 +44,8 @@ pub behavior Constraint {
 // `binding.bp` share, created by whichever cell runs first — the init literal
 // is identical in every cell and must stay so.
 
-#[@external(
-    .Node("""(function(__N, __C){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.constraints.set(__N, __C); return __V.constraints.size; })($0, $1)"""),
+#[compiler.external(
+    .JavaScript("""(function(__N, __C){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.constraints.set(__N, __C); return __V.constraints.size; })($0, $1)"""),
     .Erlang("""(fun(VaN__, VaC__) -> {VaO__, VaF__, VaK__} = persistent_term:get({validation, constraints}, {[], #{}, #{}}), VaO2__ = case lists:member(VaN__, VaO__) of true -> VaO__; false -> VaO__ ++ [VaN__] end, VaF2__ = maps:put(VaN__, VaC__, VaF__), persistent_term:put({validation, constraints}, {VaO2__, VaF2__, VaK__}), maps:size(VaF2__) end)($0, $1)"""),
 )]
 declare fn rkvPut(
@@ -53,38 +53,38 @@ declare fn rkvPut(
     c: fn(field: string, value: string) -> string,
 ) -> i32;
 
-#[@external(
-    .Node("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.constraints.has(__N); })($0)"""),
+#[compiler.external(
+    .JavaScript("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.constraints.has(__N); })($0)"""),
     .Erlang("""(fun(VaN__) -> maps:is_key(VaN__, element(2, persistent_term:get({validation, constraints}, {[], #{}, #{}}))) end)($0)"""),
 )]
 declare fn rkvHas(name: string) -> bool;
 
-#[@external(
-    .Node("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.constraints.get(__N); })($0)"""),
+#[compiler.external(
+    .JavaScript("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.constraints.get(__N); })($0)"""),
     .Erlang("""(fun(VaN__) -> maps:get(VaN__, element(2, persistent_term:get({validation, constraints}, {[], #{}, #{}}))) end)($0)"""),
 )]
 declare fn rkvGet(name: string) -> fn(field: string, value: string) -> string;
 
-#[@external(
-    .Node("""(function(__N, __C){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.codes.set(__N, __C); return __V.codes.size; })($0, $1)"""),
+#[compiler.external(
+    .JavaScript("""(function(__N, __C){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.codes.set(__N, __C); return __V.codes.size; })($0, $1)"""),
     .Erlang("""(fun(VaN__, VaC__) -> {VaO__, VaF__, VaK__} = persistent_term:get({validation, constraints}, {[], #{}, #{}}), VaK2__ = maps:put(VaN__, VaC__, VaK__), persistent_term:put({validation, constraints}, {VaO__, VaF__, VaK2__}), maps:size(VaK2__) end)($0, $1)"""),
 )]
 declare fn rkvPutCode(name: string, code: string) -> i32;
 
-#[@external(
-    .Node("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.codes.has(__N) ? __V.codes.get(__N) : ""; })($0)"""),
+#[compiler.external(
+    .JavaScript("""(function(__N){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.codes.has(__N) ? __V.codes.get(__N) : ""; })($0)"""),
     .Erlang("""(fun(VaN__) -> maps:get(VaN__, element(3, persistent_term:get({validation, constraints}, {[], #{}, #{}})), <<>>) end)($0)"""),
 )]
 declare fn rkvCode(name: string) -> string;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return Array.from(__V.constraints.keys()).join(","); })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return Array.from(__V.constraints.keys()).join(","); })()"""),
     .Erlang("""(fun() -> {VaO__, VaF__, _} = persistent_term:get({validation, constraints}, {[], #{}, #{}}), iolist_to_binary(lists:join(<<",">>, [VaN__ || VaN__ <- VaO__, maps:is_key(VaN__, VaF__)])) end)()"""),
 )]
 declare fn rkvNames() -> string;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.constraints.clear(); __V.codes.clear(); return 0; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.constraints.clear(); __V.codes.clear(); return 0; })()"""),
     .Erlang("""(fun() -> persistent_term:erase({validation, constraints}), 0 end)()"""),
 )]
 declare fn rkvClear() -> i32;
@@ -173,20 +173,20 @@ pub fn vConstraint(
 // registration order), the `schemas` member of the node cell, made when first
 // written (the cell's init literal is unchanged).
 
-#[@external(
-    .Node("""(function(__I, __F){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); __S.set(__I, __F); return __S.size; })($0, $1)"""),
+#[compiler.external(
+    .JavaScript("""(function(__I, __F){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); __S.set(__I, __F); return __S.size; })($0, $1)"""),
     .Erlang("""(fun(VaI__, VaF__) -> VaL__ = persistent_term:get({validation, schemas}, []), VaL2__ = case lists:keymember(VaI__, 1, VaL__) of true -> lists:keyreplace(VaI__, 1, VaL__, {VaI__, VaF__}); false -> VaL__ ++ [{VaI__, VaF__}] end, persistent_term:put({validation, schemas}, VaL2__), length(VaL2__) end)($0, $1)"""),
 )]
 declare fn schemaPut(id: string, document: fn() -> string) -> i32;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); return Array.from(__S.entries()).map(function(__E){ return [__E[0], __E[1]()]; }); })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); return Array.from(__S.entries()).map(function(__E){ return [__E[0], __E[1]()]; }); })()"""),
     .Erlang("""(fun() -> [{VaI__, VaF__()} || {VaI__, VaF__} <- persistent_term:get({validation, schemas}, [])] end)()"""),
 )]
 declare fn schemaDocuments() -> Array<#(string, string)>;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.schemas = new Map(); return 0; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.schemas = new Map(); return 0; })()"""),
     .Erlang("""(fun() -> persistent_term:erase({validation, schemas}), 0 end)()"""),
 )]
 declare fn schemaClear() -> i32;

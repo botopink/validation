@@ -44,7 +44,7 @@ pub type Newsletter(
 #[validated]
 pub type StrictAge(age: i32)
 
-fn located(r: @Result<Newsletter, ValidationReport>) -> string {
+fn located(r: Result<Newsletter, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations
@@ -53,7 +53,7 @@ fn located(r: @Result<Newsletter, ValidationReport>) -> string {
     };
 }
 
-fn submitted(body: string) -> @Result<Newsletter, ValidationReport> {
+fn submitted(body: string) -> Result<Newsletter, ValidationReport> {
     val pairs = try querystring.parseForm(body) catch [];
     return Newsletter.bind(pairs);
 }

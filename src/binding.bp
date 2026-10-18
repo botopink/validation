@@ -25,6 +25,7 @@
 
 import {report.Violation, report.ValidationReport, report.violation};
 import {messages.Arg, messages.message, messages.builtInTemplate, messages.arg, messages.noArgs};
+import {compiler} from "std";
 
 // ── the host accumulator ────────────────────────────────────────────────────
 //
@@ -33,32 +34,32 @@ import {messages.Arg, messages.message, messages.builtInTemplate, messages.arg, 
 // each other's violations. Node: the `acc` array of the one
 // `globalThis.__bp_validation` cell (see `spi.bp`).
 
-#[@external(
-    .Node("""(function(__X){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.acc.push(__X); return __V.acc.length; })($0)"""),
+#[compiler.external(
+    .JavaScript("""(function(__X){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.acc.push(__X); return __V.acc.length; })($0)"""),
     .Erlang("""(fun(VaV__) -> VaL__ = case get({validation, acc}) of undefined -> []; VaX__ -> VaX__ end, put({validation, acc}, VaL__ ++ [VaV__]), length(VaL__) + 1 end)($0)"""),
 )]
 declare fn rkvPush(v: Violation) -> i32;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.acc.length; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return __V.acc.length; })()"""),
     .Erlang("""(fun() -> length(case get({validation, acc}) of undefined -> []; VaX__ -> VaX__ end) end)()"""),
 )]
 declare fn rkvCount() -> i32;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __O = __V.acc; __V.acc = []; return __O; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __O = __V.acc; __V.acc = []; return __O; })()"""),
     .Erlang("""(fun() -> case erase({validation, acc}) of undefined -> []; VaX__ -> VaX__ end end)()"""),
 )]
 declare fn rkvDrain() -> Array<Violation>;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.acc = []; return 0; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.acc = []; return 0; })()"""),
     .Erlang("""(fun() -> erase({validation, acc}), 0 end)()"""),
 )]
 declare fn rkvBindReset() -> i32;
 
-#[@external(
-    .Node("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return true; })()"""),
+#[compiler.external(
+    .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); return true; })()"""),
     .Erlang("""(fun() -> VaCount__ = fun() -> length(case get({validation, acc}) of undefined -> []; VaX__ -> VaX__ end) end, VaBefore__ = VaCount__(), VaParent__ = self(), VaRef__ = make_ref(), VaPid__ = spawn(fun() -> VaPush__ = fun(VaV__) -> put({validation, acc}, case get({validation, acc}) of undefined -> []; VaY__ -> VaY__ end ++ [VaV__]) end, VaPush__(child_one), VaPush__(child_two), VaParent__ ! {VaRef__, VaCount__()} end), VaMon__ = erlang:monitor(process, VaPid__), VaChild__ = receive {VaRef__, VaN__} -> erlang:demonitor(VaMon__, [flush]), VaN__; {'DOWN', VaMon__, process, VaPid__, _} -> -1 after 5000 -> erlang:demonitor(VaMon__, [flush]), -1 end, (VaChild__ =:= 2) andalso (VaCount__() =:= VaBefore__) end)()"""),
 )]
 declare fn rkvIsolated() -> bool;

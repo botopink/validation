@@ -45,7 +45,7 @@ pub type Signup(
 //   pub fn jsonSchema() -> string
 
 // `.parse` — in a function that can fail, `try` hands the report up.
-pub fn register(body: string) -> @Result<string, ValidationReport> {
+pub fn register(body: string) -> Result<string, ValidationReport> {
     val signup = try Signup.decode(body);
     return "welcome, " + signup.username;
 }
@@ -58,7 +58,7 @@ pub fn describe(body: string) -> string {
     };
 }
 
-fn located(r: @Result<Signup, ValidationReport>) -> string {
+fn located(r: Result<Signup, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations

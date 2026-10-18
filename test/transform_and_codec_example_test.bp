@@ -58,7 +58,7 @@ pub type Invite(
     #[check(isEven)] tables: i32,
 )
 
-fn codes(r: @Result<Invite, ValidationReport>) -> string {
+fn codes(r: Result<Invite, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations

@@ -52,7 +52,7 @@ pub type Category(
     subcategories: Array<Category>,
 )
 
-fn located(r: @Result<Order, ValidationReport>) -> string {
+fn located(r: Result<Order, ValidationReport>) -> string {
     return case r {
         Ok(_) -> "";
         Error(report) -> report.violations

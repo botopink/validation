@@ -29,7 +29,7 @@ import {report.Violation, report.ValidationReport, report.violation};
 import {messages.Arg, messages.arg, messages.noArgs, messages.message, messages.builtInTemplate};
 import {path.key, path.index};
 import {formats.isIsoDatetime, formats.isIsoDatetimeOffset};
-import {json, json.Json, collections.Dict, collections.Set, io.clock, unicode, unicode.NormalizationForm, url} from "std";
+import {json, json.Json, collections.Dict, collections.Set, io.clock, unicode, unicode.NormalizationForm, url, compiler} from "std";
 
 // ── reading a document ──────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ fn wrongType(at: string, expected: string, input: Json) -> ValidationReport {
 }
 
 // The violations of a result: none for a value.
-pub fn violationsOf<T>(r: @Result<T, ValidationReport>) -> Array<Violation> {
+pub fn violationsOf<T>(r: Result<T, ValidationReport>) -> Array<Violation> {
     val none: Array<Violation> = [];
     return case r {
         Ok(_) -> none;
@@ -180,21 +180,21 @@ fn nested(at: string, field: string) -> string {
 pub fn decodeString(
     input: Json,
     at: string,
-) -> @Result<string, ValidationReport> {
+) -> Result<string, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "text") throw wrongType(at, "text", input);
     return textOf(input);
 }
 
-pub fn decodeBool(input: Json, at: string) -> @Result<bool, ValidationReport> {
+pub fn decodeBool(input: Json, at: string) -> Result<bool, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a boolean") throw wrongType(at, "true or false", input);
     return boolOf(input);
 }
 
-pub fn decodeFloat(input: Json, at: string) -> @Result<f64, ValidationReport> {
+pub fn decodeFloat(input: Json, at: string) -> Result<f64, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a number") throw wrongType(at, "a number", input);
@@ -205,18 +205,18 @@ pub fn decodeFloat(input: Json, at: string) -> @Result<f64, ValidationReport> {
 // already known to be whole and in range, as the integer it is. Both targets
 // are asked to convert, never to decide — `isWhole` and the range tests below
 // are botopink.
-#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
+#[compiler.external(.JavaScript("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI32(n: f64) -> i32;
 
-#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
+#[compiler.external(.JavaScript("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI64(n: f64) -> i64;
 
-#[@external(.Node("(Number.isInteger($0))"), .Erlang("(fun(__N) -> __N == trunc(__N) end)($0)"))]
+#[compiler.external(.JavaScript("(Number.isInteger($0))"), .Erlang("(fun(__N) -> __N == trunc(__N) end)($0)"))]
 declare fn isWhole(n: f64) -> bool;
 
 // An `i32`: a JSON number with no fraction, inside the range. `1.0` is whole;
 // `1.5` and `3000000000` are a wrong type, not a value to round or wrap.
-pub fn decodeInt(input: Json, at: string) -> @Result<i32, ValidationReport> {
+pub fn decodeInt(input: Json, at: string) -> Result<i32, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a number") throw wrongType(at, "a whole number", input);
@@ -229,7 +229,7 @@ pub fn decodeInt(input: Json, at: string) -> @Result<i32, ValidationReport> {
 // An `i64`: a JSON number is an `f64`, so what a document can say exactly is a
 // whole number within ±(2^53 − 1). Beyond that the wire form is digit text,
 // which is coercion's (`#[coerce]`), not this decoder's.
-pub fn decodeLong(input: Json, at: string) -> @Result<i64, ValidationReport> {
+pub fn decodeLong(input: Json, at: string) -> Result<i64, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a number") throw wrongType(at, "a whole number", input);
@@ -243,7 +243,7 @@ pub fn decodeLong(input: Json, at: string) -> @Result<i64, ValidationReport> {
 
 // A `Json` field takes the document as it is, absent included: `Json.Null` is
 // a value of the type.
-pub fn decodeJson(input: Json, at: string) -> @Result<Json, ValidationReport> {
+pub fn decodeJson(input: Json, at: string) -> Result<Json, ValidationReport> {
     return input;
 }
 
@@ -261,8 +261,8 @@ fn absent<T>() -> ?T {
 pub fn optionalOf<T>(
     input: Json,
     at: string,
-    inner: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> @Result<?T, ValidationReport> {
+    inner: fn(input: Json, at: string) -> Result<T, ValidationReport>,
+) -> Result<?T, ValidationReport> {
     if (isNull(input)) return absent();
     val v = try inner(input, at);
     return present(v);
@@ -273,8 +273,8 @@ pub fn optionalOf<T>(
 pub fn decodeArrayOf<T>(
     input: Json,
     at: string,
-    item: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> @Result<Array<T>, ValidationReport> {
+    item: fn(input: Json, at: string) -> Result<T, ValidationReport>,
+) -> Result<Array<T>, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a list") throw wrongType(at, "a list", input);
@@ -345,8 +345,8 @@ pub fn unknownKeys(
 // `{reason}`; its byte offset is in it (`std/json` — "… at byte <n>").
 pub fn decodeText<T>(
     text: string,
-    run: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> @Result<T, ValidationReport> {
+    run: fn(input: Json, at: string) -> Result<T, ValidationReport>,
+) -> Result<T, ValidationReport> {
     val read = json.decode(text);
     val reason = case read {
         Ok(_) -> "";
@@ -372,7 +372,7 @@ pub fn variantName(
     input: Json,
     at: string,
     options: Array<string>,
-) -> @Result<string, ValidationReport> {
+) -> Result<string, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "text") throw wrongType(at, "text", input);
@@ -412,7 +412,7 @@ pub fn tupleItems(
     input: Json,
     at: string,
     n: i32,
-) -> @Result<Array<Json>, ValidationReport> {
+) -> Result<Array<Json>, ValidationReport> {
     val k = kindOf(input);
     val expected = ["a list of ", [n].join(""), " items"].join("");
     if (k == "null") throw missing(at);
@@ -433,9 +433,9 @@ pub fn itemOf(items: Array<Json>, i: i32) -> Json {
 pub fn decodeDictOf<K, V>(
     input: Json,
     at: string,
-    keyOf: fn(input: Json, at: string) -> @Result<K, ValidationReport>,
-    valueOf: fn(input: Json, at: string) -> @Result<V, ValidationReport>,
-) -> @Result<Dict<K, V>, ValidationReport> {
+    keyOf: fn(input: Json, at: string) -> Result<K, ValidationReport>,
+    valueOf: fn(input: Json, at: string) -> Result<V, ValidationReport>,
+) -> Result<Dict<K, V>, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "an object") throw wrongType(at, "an object", input);
@@ -487,8 +487,8 @@ fn noViolations() -> Array<Violation> {
 pub fn decodeSetOf<T>(
     input: Json,
     at: string,
-    item: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> @Result<Set<T>, ValidationReport> {
+    item: fn(input: Json, at: string) -> Result<T, ValidationReport>,
+) -> Result<Set<T>, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     if (k != "a list") throw wrongType(at, "a list", input);
@@ -526,7 +526,7 @@ fn repeated<T>(
 }
 
 // A dict key as an `i32`: the key is text, read by the integer grammar.
-pub fn decodeIntKey(input: Json, at: string) -> @Result<i32, ValidationReport> {
+pub fn decodeIntKey(input: Json, at: string) -> Result<i32, ValidationReport> {
     val text = textOf(input);
     val digits = text.parseInt();
     val ok = case digits {
@@ -554,8 +554,8 @@ pub fn presentOf<T>(
     input: Json,
     name: string,
     at: string,
-    inner: fn(input: Json, at: string) -> @Result<T, ValidationReport>,
-) -> @Result<?T, ValidationReport> {
+    inner: fn(input: Json, at: string) -> Result<T, ValidationReport>,
+) -> Result<?T, ValidationReport> {
     val where = key(at, name);
     val keys = input.members().map({ m -> m[0] });
     if (keys.indexOf(name) < 0) return absent();
@@ -671,7 +671,7 @@ pub fn coerced(input: Json, hint: string) -> Json {
 pub fn decodeStringBool(
     input: Json,
     at: string,
-) -> @Result<bool, ValidationReport> {
+) -> Result<bool, ValidationReport> {
     val k = kindOf(input);
     if (k == "null") throw missing(at);
     val word = textOf(input).toLower();
@@ -774,10 +774,10 @@ fn formScalar(text: string, hint: string) -> Json {
 // `#[typeMessage("…")]`: the `invalidType` a field's own value answers, under
 // the field's text.
 pub fn typeRestated<T>(
-    r: @Result<T, ValidationReport>,
+    r: Result<T, ValidationReport>,
     at: string,
     text: string,
-) -> @Result<T, ValidationReport> {
+) -> Result<T, ValidationReport> {
     val vs = violationsOf(r);
     if (vs.length == 0) return try r;
     throw ValidationReport(
@@ -799,10 +799,10 @@ pub fn typeRestated<T>(
 // `null` is left out — absent and `null` decode the same.
 
 // An integer as the `f64` a JSON number is — converting, never deciding.
-#[@external(.Node("($0)"), .Erlang("float($0)"))]
+#[compiler.external(.JavaScript("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI32(n: i32) -> f64;
 
-#[@external(.Node("($0)"), .Erlang("float($0)"))]
+#[compiler.external(.JavaScript("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI64(n: i64) -> f64;
 
 pub fn encodeInt(n: i32) -> Json {

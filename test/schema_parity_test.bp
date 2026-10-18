@@ -74,7 +74,7 @@ fn rendered(e: Entry) -> string {
     ].join("/");
 }
 
-fn digestOne(i: i32, r: @Result<Entry, ValidationReport>) -> string {
+fn digestOne(i: i32, r: Result<Entry, ValidationReport>) -> string {
     val body = case r {
         Ok(entry) -> "ok " + rendered(entry);
         Error(report) -> report.violations

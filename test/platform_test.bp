@@ -42,17 +42,17 @@ test "validation: a generic record carries a function and maps it" {
 
 // ── a result is built by a function ─────────────────────────────────────────
 
-fn whole(text: string) -> @Result<i32, string> {
+fn whole(text: string) -> Result<i32, string> {
     if (text != "7") throw "not seven";
     return 7;
 }
 
-fn through(text: string) -> @Result<i32, string> {
+fn through(text: string) -> Result<i32, string> {
     val n = try whole(text);
     return n + 1;
 }
 
-fn outcome(r: @Result<i32, string>) -> string {
+fn outcome(r: Result<i32, string>) -> string {
     return case r {
         Ok(n) -> "ok " + n.toString();
         Error(why) -> "error " + why;

@@ -13,12 +13,12 @@
 
 import {formats.isIsoDatetimeOffset, formats.isUrl};
 import {derived.jsonText, derived.numberText};
-import {json, json.Json, io.clock, encoding, url, url.Url, math} from "std";
+import {json, json.Json, io.clock, encoding, url, url.Url, math, compiler} from "std";
 
 // ── numbers from text ───────────────────────────────────────────────────────
 
 // `stringToInt`: an `i32` as decimal text, std's integer grammar, in range.
-pub fn textToInt(text: string) -> @Result<i32, string> {
+pub fn textToInt(text: string) -> Result<i32, string> {
     val n = try text.parseFloat() catch 0.5;
     val integral = case text.parseInt() {
         Ok(_) -> true;
@@ -36,7 +36,7 @@ pub fn intToText(n: i32) -> string {
 
 // `stringToBigInt`: an `i64` as decimal text, the whole `i64` range (std's
 // `String.parseInt`, decision 319).
-pub fn textToLong(text: string) -> @Result<i64, string> {
+pub fn textToLong(text: string) -> Result<i64, string> {
     return try text.parseInt();
 }
 
@@ -45,7 +45,7 @@ pub fn longToText(n: i64) -> string {
 }
 
 // `stringToNumber`: an `f64` as std's numeral grammar.
-pub fn textToFloat(text: string) -> @Result<f64, string> {
+pub fn textToFloat(text: string) -> Result<f64, string> {
     return try text.parseFloat();
 }
 
@@ -57,7 +57,7 @@ pub fn floatToText(n: f64) -> string {
 // ── instants ────────────────────────────────────────────────────────────────
 
 // `isoDatetimeToDate`: RFC 3339 text with its zone → epoch milliseconds.
-pub fn isoToMillis(text: string) -> @Result<i64, string> {
+pub fn isoToMillis(text: string) -> Result<i64, string> {
     if (isIsoDatetimeOffset(text) == false)
         throw "\"" + text + "\" is not an ISO datetime with its zone";
     return try clock.parseIso8601(text);
@@ -120,7 +120,7 @@ fn padded(n: f64, width: i32) -> string {
 }
 
 // `epochSecondsToDate`: whole seconds → epoch milliseconds.
-pub fn secondsToMillis(seconds: i64) -> @Result<i64, string> {
+pub fn secondsToMillis(seconds: i64) -> Result<i64, string> {
     val limit = wholeI64(9007199254740.0);
     if (seconds > limit || seconds < 0 - limit)
         throw "the seconds do not fit milliseconds within 2^53 - 1";
@@ -135,7 +135,7 @@ pub fn millisToSeconds(ms: i64) -> i64 {
 // ── text in a wire format ───────────────────────────────────────────────────
 
 // `jsonCodec`: JSON text → the document (std's `json.decode`).
-pub fn textToJson(text: string) -> @Result<Json, string> {
+pub fn textToJson(text: string) -> Result<Json, string> {
     return try json.decode(text);
 }
 
@@ -146,7 +146,7 @@ pub fn jsonToText(j: Json) -> string {
 }
 
 // `base64ToBytes` over text: base64 → the text it encodes.
-pub fn base64ToText(b: string) -> @Result<string, string> {
+pub fn base64ToText(b: string) -> Result<string, string> {
     return try encoding.base64Decode(b);
 }
 
@@ -154,7 +154,7 @@ pub fn textToBase64(s: string) -> string {
     return encoding.base64Encode(s);
 }
 
-pub fn base64urlToText(b: string) -> @Result<string, string> {
+pub fn base64urlToText(b: string) -> Result<string, string> {
     return try encoding.base64UrlDecode(b);
 }
 
@@ -163,7 +163,7 @@ pub fn textToBase64url(s: string) -> string {
 }
 
 // `hexToBytes` over text: lowercase hex → the text it encodes.
-pub fn hexToText(h: string) -> @Result<string, string> {
+pub fn hexToText(h: string) -> Result<string, string> {
     return try encoding.hexDecode(h);
 }
 
@@ -172,7 +172,7 @@ pub fn textToHex(s: string) -> string {
 }
 
 // `uriComponent`: percent-encoded text → the text (RFC 3986's unreserved set).
-pub fn uriComponentToText(c: string) -> @Result<string, string> {
+pub fn uriComponentToText(c: string) -> Result<string, string> {
     return try encoding.percentDecode(c);
 }
 
@@ -183,7 +183,7 @@ pub fn textToUriComponent(s: string) -> string {
 // ── values ──────────────────────────────────────────────────────────────────
 
 // `stringToURL`: a URL that `#[url]` accepts → its parts.
-pub fn textToUrl(text: string) -> @Result<Url, string> {
+pub fn textToUrl(text: string) -> Result<Url, string> {
     if (isUrl(text) == false)
         throw "\"" + text + "\" is not a URL with a scheme and a host";
     return url.parse(text);
@@ -196,7 +196,7 @@ pub fn urlToText(u: Url) -> string {
 // `stringToBoolean`: the stringbool set (`true 1 yes on y enabled` / `false 0
 // no off n disabled`, case-insensitive) → a `bool`; written back as `true` /
 // `false`.
-pub fn textToBool(text: string) -> @Result<bool, string> {
+pub fn textToBool(text: string) -> Result<bool, string> {
     val word = text.toLower();
     if (["true", "1", "yes", "on", "y", "enabled"].indexOf(word) >= 0)
         return true;
@@ -213,11 +213,11 @@ pub fn boolToText(b: bool) -> string {
 
 // ── conversions the language has no spelling for (see `derived.bp`) ───────
 
-#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
+#[compiler.external(.JavaScript("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI32(n: f64) -> i32;
 
-#[@external(.Node("Math.trunc($0)"), .Erlang("trunc($0)"))]
+#[compiler.external(.JavaScript("Math.trunc($0)"), .Erlang("trunc($0)"))]
 declare fn wholeI64(n: f64) -> i64;
 
-#[@external(.Node("($0)"), .Erlang("float($0)"))]
+#[compiler.external(.JavaScript("($0)"), .Erlang("float($0)"))]
 declare fn floatOfI64(n: i64) -> f64;

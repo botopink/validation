@@ -77,7 +77,7 @@ pub type Levels(
     #[minLength(3)] #[message("the check's own")] code: string,
 )
 
-fn levelMessages(r: @Result<Levels, ValidationReport>) -> string {
+fn levelMessages(r: Result<Levels, ValidationReport>) -> string {
     return derived
         .violationsOf(r)
         .map({ v -> v.field + ": " + v.message })

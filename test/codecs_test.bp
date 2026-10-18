@@ -11,7 +11,7 @@ import {codecs.hexToText, codecs.textToHex, codecs.uriComponentToText, codecs.te
 import {codecs.textToUrl, codecs.urlToText, codecs.textToBool, codecs.boolToText};
 import {json.Json} from "std";
 
-fn failed<T>(r: @Result<T, string>) -> bool {
+fn failed<T>(r: Result<T, string>) -> bool {
     return case r {
         Ok(_) -> false;
         Error(_) -> true;

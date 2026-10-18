@@ -12,7 +12,7 @@ import {report.ValidationReport, report.Violation, table, table.constraintTableJ
 import {constraints.vEmail, constraints.vIsoDatetime, constraints.vIsoDate, constraints.vIsoDuration, constraints.vIpv4, constraints.vIpv6};
 import {constraints.vUuid, constraints.vGuid, constraints.vUrl, constraints.vBase64, constraints.vMinLength};
 import {json_schema_example_test.User, json_schema_example_test.Ping};
-import {io.process, io.fs, path, json, json.Json} from "std";
+import {io.process, io.fs, path, json, json.Json, compiler} from "std";
 
 fn sameJson(a: Json, b: Json) -> bool {
     return case a {
@@ -172,7 +172,7 @@ test "validation: another type is a $def, and draft-07 calls them definitions" {
 // Which backend is running: the meta-schema check is `node`'s, so the erlang
 // row does not run it (decision 399: commonJS only); the sixteen literals
 // above stay on both. Private, as std's tests keep theirs.
-#[@external(.Node("""'commonJS'"""), .Erlang("""<<"erlang">>"""))]
+#[compiler.external(.JavaScript("""'commonJS'"""), .Erlang("""<<"erlang">>"""))]
 declare fn hostTarget() -> string;
 
 // `ok`, or the vendored validator's error list, for one document: Ajv's
