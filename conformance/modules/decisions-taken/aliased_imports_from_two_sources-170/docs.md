@@ -1,0 +1,3 @@
+# Decision 170 — std takes the natural name and a library's copy goes (`clock.parseDuration`, `async.RetryPolicy`, `async.nextDelay`; rak
+
+[draft/main.bp](draft/main.bp)

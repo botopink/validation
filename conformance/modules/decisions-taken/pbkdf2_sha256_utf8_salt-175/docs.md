@@ -1,0 +1,3 @@
+# Decision 175 — † `hash.pbkdf2Sha256(password, salt, iterations, length)` derives over the salt's UTF-8 bytes, the same on node and erla
+
+[draft/main.bp](draft/main.bp)

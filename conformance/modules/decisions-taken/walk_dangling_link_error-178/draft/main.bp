@@ -1,0 +1,3 @@
+//// Decision 178 — † A dangling link under `fs.walk` is an `Error` naming the link, on both targets — not skipped
+
+pub fn main() -> void {}

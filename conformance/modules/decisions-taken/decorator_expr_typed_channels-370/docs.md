@@ -1,0 +1,3 @@
+# Decision 370 — A decorator hands a parameter's `@Expr` on to the program through two typed channels — typed meta or a typed member — never source text.
+
+[draft/main.bp](draft/main.bp)

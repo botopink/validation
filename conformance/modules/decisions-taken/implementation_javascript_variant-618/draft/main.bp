@@ -1,0 +1,3 @@
+//// Decision 618 — `Implementation.Node` is renamed `JavaScript`: a source names the language the template is written in, not a runtime.
+
+pub fn main() -> void {}

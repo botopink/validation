@@ -1,0 +1,3 @@
+# Decision 144 — A `#[validated]` record (306) refuses a key it does not declare: a violation coded `unrecognizedKey`, at the key's own p
+
+[draft/main.bp](draft/main.bp)

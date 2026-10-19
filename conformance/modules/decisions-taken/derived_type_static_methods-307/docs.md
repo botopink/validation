@@ -1,0 +1,3 @@
+# Decision 307 — A derived type is a compile-time function that answers a new type, bound by a `val`; the five are static methods of one std type, `Type`:
+
+[draft/main.bp](draft/main.bp)

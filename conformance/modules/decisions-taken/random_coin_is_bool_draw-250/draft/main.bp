@@ -1,0 +1,3 @@
+//// Decision 250 — † std's `io.random.bool()` is dropped, not renamed; `coin()` is the boolean draw
+
+pub fn main() -> void {}
