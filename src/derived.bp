@@ -19,7 +19,7 @@
 //// A document cannot say "explicitly null" to a reader that has one absent value.
 ////
 //// A RESULT IS BUILT BY A FUNCTION, NEVER BY A LAMBDA. `Ok(…)` and `Error(…)`
-//// are patterns, not constructors: a `@Result` comes out of a function whose
+//// are patterns, not constructors: a `Result` comes out of a function whose
 //// return is one, through `return` and `throw`. So every decoder here is a named
 //// function, a `throw` is written at the top level of its body (one inside a
 //// `case` arm does not become the function's `Error` on erlang —

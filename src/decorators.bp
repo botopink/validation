@@ -75,283 +75,316 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) {
     var calls: Array<string> = [];
     var rows: Array<string> = [];
     var problem = "";
-    compiler.fields(decl).forEach({ f ->
-        val names = f.annotations.map({ a -> a.name });
-        var fieldCalls: Array<string> = [];
-        var fieldGuards: Array<string> = [];
-        f.annotations.forEach({ a ->
-            val declared = f.typeName;
-            val nullable = declared.startsWith("?");
-            val t = if (nullable)
-                declared.slice(1, declared.length())
-            else
-                declared;
-            val base = "v." + f.name;
-            val zero = optionalZero(t);
-            val read = if (nullable) "(" + base + " ?? " + zero + ")" else base;
-            val q = "\"" + f.name + "\"";
-            val raw = a.args.join(", ");
-            val bare = if (a.name == "oneOf")
-                a.args.map({ o -> unquoted(o) }).join(",")
-            else
-                a.args.join("|").replaceAll("\"", "");
-            val n = a.name;
-            val isText = t == "string";
-            val isList = t.startsWith("Array<") || t.endsWith("[]");
-            var call = "";
-            var why = "";
-            if (n == "notNull")
-                if (nullable)
-                    call = "vNotNull(" + q + ", " + base + " != null)"
+    compiler
+        .fields(decl)
+        .forEach({ f ->
+            val names = f.annotations.map({ a -> a.name });
+            var fieldCalls: Array<string> = [];
+            var fieldGuards: Array<string> = [];
+            f.annotations.forEach({ a ->
+                val declared = f.typeName;
+                val nullable = declared.startsWith("?");
+                val t = if (nullable)
+                    declared.slice(1, declared.length())
                 else
-                    why = "a field of type `"
-                        + declared
-                        + "` can never be null, so the constraint could never fail";
-            if (n == "notBlank")
-                if (isText)
-                    call = "vNotBlank(" + q + ", " + read + ")"
+                    declared;
+                val base = "v." + f.name;
+                val zero = optionalZero(t);
+                val read = if (nullable)
+                    "(" + base + " ?? " + zero + ")"
                 else
-                    why = "it applies to `string`, and this field is `"
+                    base;
+                val q = "\"" + f.name + "\"";
+                val raw = a.args.join(", ");
+                val bare = if (a.name == "oneOf")
+                    a.args.map({ o -> unquoted(o) }).join(",")
+                else
+                    a.args.join("|").replaceAll("\"", "");
+                val n = a.name;
+                val isText = t == "string";
+                val isList = t.startsWith("Array<") || t.endsWith("[]");
+                var call = "";
+                var why = "";
+                if (n == "notNull")
+                    if (nullable)
+                        call = "vNotNull(" + q + ", " + base + " != null)"
+                    else
+                        why = "a field of type `"
+                            + declared
+                            + "` can never be null, so the constraint could never fail";
+                if (n == "notBlank")
+                    if (isText)
+                        call = "vNotBlank(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to `string`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "notEmpty")
+                    if (isText)
+                        call = "vNotEmpty(" + q + ", " + read + ")"
+                    else if (isList)
+                        call = "vNotEmptyList(" + q + ", " + read + ")"
+                    else if (t.startsWith("Dict<"))
+                        call = "vNotEmptyDict(" + q + ", " + read + ")"
+                    else if (t.startsWith("Set<"))
+                        call = "vNotEmptySet(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to `string`, `Array<T>`, `Dict<K, V>` and `Set<T>`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "sizeBetween")
+                    if (isText)
+                        call = "vSizeBetween("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + raw
+                            + ")"
+                    else if (isList)
+                        call = "vSizeBetweenList("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + raw
+                            + ")"
+                    else
+                        why = "it applies to `string` and `Array<T>`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "minValue")
+                    if (t == "i32")
+                        call = "vMinValueI32("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + raw
+                            + ")"
+                    else if (t == "f64")
+                        call = "vMinValueF64("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + asF64(raw)
+                            + ")"
+                    else
+                        why = "it applies to `i32` and `f64`, and this field is `"
+                            + declared
+                            + "` (an integer literal does not widen to `i64`, so an `i64` bound cannot be written)";
+                if (n == "maxValue")
+                    if (t == "i32")
+                        call = "vMaxValueI32("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + raw
+                            + ")"
+                    else if (t == "f64")
+                        call = "vMaxValueF64("
+                            + q
+                            + ", "
+                            + read
+                            + ", "
+                            + asF64(raw)
+                            + ")"
+                    else
+                        why = "it applies to `i32` and `f64`, and this field is `"
+                            + declared
+                            + "` (an integer literal does not widen to `i64`, so an `i64` bound cannot be written)";
+                if (n == "positive")
+                    if (t == "i32")
+                        call = "vPositiveI32(" + q + ", " + read + ")"
+                    else if (t == "i64")
+                        call = "vPositiveI64(" + q + ", " + read + ")"
+                    else if (t == "f64")
+                        call = "vPositiveF64(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to `i32`, `i64` and `f64`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "positiveOrZero")
+                    if (t == "i32")
+                        call = "vPositiveOrZeroI32(" + q + ", " + read + ")"
+                    else if (t == "i64")
+                        call = "vPositiveOrZeroI64(" + q + ", " + read + ")"
+                    else if (t == "f64")
+                        call = "vPositiveOrZeroF64(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to `i32`, `i64` and `f64`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "email")
+                    if (isText)
+                        call = "vEmail(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to `string`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "pattern")
+                    if (isText)
+                        call = "vPattern(" + q + ", " + read + ", " + raw + ")"
+                    else
+                        why = "it applies to `string`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "pastDate")
+                    if (t == "i64")
+                        call = "vPastDate(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to epoch milliseconds, which is `i64`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "futureDate")
+                    if (t == "i64")
+                        call = "vFutureDate(" + q + ", " + read + ")"
+                    else
+                        why = "it applies to epoch milliseconds, which is `i64`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "constraint")
+                    if (isText)
+                        call = "vConstraint("
+                            + q
+                            + ", "
+                            + raw
+                            + ", "
+                            + read
+                            + ")"
+                    else
+                        why = "a registered constraint reads a `string`, and this field is `"
+                            + declared
+                            + "`";
+                if (n == "check")
+                    call = "vCheck(" + q + ", " + raw + "(" + read + "))";
+                if (n == "each") {
+                    val m = unquoted(a.args.join(""));
+                    val itemType = if (isList)
+                        schemaItemOf(t)
+                    else if (t.startsWith("Set<"))
+                        schemaArgs(t).slice(0, 1).join("")
+                    else
+                        "";
+                    val items = if (t.startsWith("Set<"))
+                        read + ".toList()"
+                    else
+                        read;
+                    val itemCall = if (itemType == "")
+                        ""
+                    else
+                        itemRule(m, itemType, names);
+                    if (itemType == "")
+                        why = "it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `"
+                            + declared
+                            + "`";
+                    if (itemType != "" && itemCall.startsWith("!"))
+                        why = itemCall.slice(1, itemCall.length());
+                    if (itemType != ""
+                        && itemCall != ""
+                        && itemCall.startsWith("!") == false
+                        && itemCall != "-")
+                        call = "vEach("
+                            + q
+                            + ", "
+                            + items
+                            + ", { __p, __x -> "
+                            + itemCall
+                            + " })";
+                }
+                if (call == "" && why == "" && n != "each") {
+                    val rule = markerRule(n, t, declared, q, read, a.args, names);
+                    if (rule.startsWith("!"))
+                        why = rule.slice(1, rule.length())
+                    else if (rule != "-")
+                        call = rule;
+                }
+                if (nullable && n != "notNull" && call != "" && zero == "") {
+                    why = "a marker on an optional field applies to `?string`, `?i32`, `?i64` and `?f64`, and this field is `"
                         + declared
                         + "`";
-            if (n == "notEmpty")
-                if (isText)
-                    call = "vNotEmpty(" + q + ", " + read + ")"
-                else if (isList)
-                    call = "vNotEmptyList(" + q + ", " + read + ")"
-                else if (t.startsWith("Dict<"))
-                    call = "vNotEmptyDict(" + q + ", " + read + ")"
-                else if (t.startsWith("Set<"))
-                    call = "vNotEmptySet(" + q + ", " + read + ")"
-                else
-                    why = "it applies to `string`, `Array<T>`, `Dict<K, V>` and `Set<T>`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "sizeBetween")
-                if (isText)
-                    call = "vSizeBetween(" + q + ", " + read + ", " + raw + ")"
-                else if (isList)
-                    call = "vSizeBetweenList("
-                        + q
-                        + ", "
-                        + read
-                        + ", "
-                        + raw
-                        + ")"
-                else
-                    why = "it applies to `string` and `Array<T>`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "minValue")
-                if (t == "i32")
-                    call = "vMinValueI32(" + q + ", " + read + ", " + raw + ")"
-                else if (t == "f64")
-                    call = "vMinValueF64("
-                        + q
-                        + ", "
-                        + read
-                        + ", "
-                        + asF64(raw)
-                        + ")"
-                else
-                    why = "it applies to `i32` and `f64`, and this field is `"
-                        + declared
-                        + "` (an integer literal does not widen to `i64`, so an `i64` bound cannot be written)";
-            if (n == "maxValue")
-                if (t == "i32")
-                    call = "vMaxValueI32(" + q + ", " + read + ", " + raw + ")"
-                else if (t == "f64")
-                    call = "vMaxValueF64("
-                        + q
-                        + ", "
-                        + read
-                        + ", "
-                        + asF64(raw)
-                        + ")"
-                else
-                    why = "it applies to `i32` and `f64`, and this field is `"
-                        + declared
-                        + "` (an integer literal does not widen to `i64`, so an `i64` bound cannot be written)";
-            if (n == "positive")
-                if (t == "i32")
-                    call = "vPositiveI32(" + q + ", " + read + ")"
-                else if (t == "i64")
-                    call = "vPositiveI64(" + q + ", " + read + ")"
-                else if (t == "f64")
-                    call = "vPositiveF64(" + q + ", " + read + ")"
-                else
-                    why = "it applies to `i32`, `i64` and `f64`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "positiveOrZero")
-                if (t == "i32")
-                    call = "vPositiveOrZeroI32(" + q + ", " + read + ")"
-                else if (t == "i64")
-                    call = "vPositiveOrZeroI64(" + q + ", " + read + ")"
-                else if (t == "f64")
-                    call = "vPositiveOrZeroF64(" + q + ", " + read + ")"
-                else
-                    why = "it applies to `i32`, `i64` and `f64`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "email")
-                if (isText)
-                    call = "vEmail(" + q + ", " + read + ")"
-                else
-                    why = "it applies to `string`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "pattern")
-                if (isText)
-                    call = "vPattern(" + q + ", " + read + ", " + raw + ")"
-                else
-                    why = "it applies to `string`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "pastDate")
-                if (t == "i64")
-                    call = "vPastDate(" + q + ", " + read + ")"
-                else
-                    why = "it applies to epoch milliseconds, which is `i64`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "futureDate")
-                if (t == "i64")
-                    call = "vFutureDate(" + q + ", " + read + ")"
-                else
-                    why = "it applies to epoch milliseconds, which is `i64`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "constraint")
-                if (isText)
-                    call = "vConstraint(" + q + ", " + raw + ", " + read + ")"
-                else
-                    why = "a registered constraint reads a `string`, and this field is `"
-                        + declared
-                        + "`";
-            if (n == "check")
-                call = "vCheck(" + q + ", " + raw + "(" + read + "))";
-            if (n == "each") {
-                val m = unquoted(a.args.join(""));
-                val itemType = if (isList)
-                    schemaItemOf(t)
-                else if (t.startsWith("Set<"))
-                    schemaArgs(t).slice(0, 1).join("")
-                else
-                    "";
-                val items = if (t.startsWith("Set<"))
-                    read + ".toList()"
-                else
-                    read;
-                val itemCall = if (itemType == "")
-                    ""
-                else
-                    itemRule(m, itemType, names);
-                if (itemType == "")
-                    why = "it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `"
-                        + declared
-                        + "`";
-                if (itemType != "" && itemCall.startsWith("!"))
-                    why = itemCall.slice(1, itemCall.length());
-                if (itemType != ""
-                    && itemCall != ""
-                    && itemCall.startsWith("!") == false
-                    && itemCall != "-")
-                    call = "vEach("
-                        + q
-                        + ", "
-                        + items
-                        + ", { __p, __x -> "
-                        + itemCall
-                        + " })";
-            }
-            if (call == "" && why == "" && n != "each") {
-                val rule = markerRule(n, t, declared, q, read, a.args, names);
-                if (rule.startsWith("!"))
-                    why = rule.slice(1, rule.length())
-                else if (rule != "-")
-                    call = rule;
-            }
-            if (nullable && n != "notNull" && call != "" && zero == "") {
-                why = "a marker on an optional field applies to `?string`, `?i32`, `?i64` and `?f64`, and this field is `"
-                    + declared
-                    + "`";
-                call = "";
-            }
-            if (why != "")
-                problem = "#["
-                    + n
-                    + "] on field `"
-                    + f.name
-                    + "` of `"
-                    + compiler.name(decl)!
-                    + "`: "
-                    + why;
-            val suffix = if (bare == "") "" else "|" + bare;
-            val guard = if (nullable && n != "notNull")
-                base + " != null"
-            else
-                "";
-            if (call != "") {
-                fieldCalls.push(call);
-                fieldGuards.push(guard);
-            }
-            if (call != "") rows.push(f.name + "|" + n + suffix);
-            if (n == "message") {
-                val count = fieldCalls.length;
-                if (count == 0)
-                    problem = "#[message] on field `"
+                    call = "";
+                }
+                if (why != "")
+                    problem = "#["
+                        + n
+                        + "] on field `"
                         + f.name
                         + "` of `"
                         + compiler.name(decl)!
-                        + "`: it restates the marker before it, and none comes before it";
-                if (count > 0)
-                    fieldCalls = fieldCalls
-                        .slice(0, count - 1)
-                        .append(
-                            [
-                                "Violation.restated("
-                                    + fieldCalls
-                                        .slice(count - 1, count)
-                                        .join("")
-                                    + ", "
-                                    + raw
-                                    + ")",
-                            ],
-                        );
+                        + "`: "
+                        + why;
+                val suffix = if (bare == "") "" else "|" + bare;
+                val guard = if (nullable && n != "notNull")
+                    base + " != null"
+                else
+                    "";
+                if (call != "") {
+                    fieldCalls.push(call);
+                    fieldGuards.push(guard);
+                }
+                if (call != "") rows.push(f.name + "|" + n + suffix);
+                if (n == "message") {
+                    val count = fieldCalls.length;
+                    if (count == 0)
+                        problem = "#[message] on field `"
+                            + f.name
+                            + "` of `"
+                            + compiler.name(decl)!
+                            + "`: it restates the marker before it, and none comes before it";
+                    if (count > 0)
+                        fieldCalls = fieldCalls
+                            .slice(0, count - 1)
+                            .append(
+                                [
+                                    "Violation.restated("
+                                        + fieldCalls
+                                            .slice(count - 1, count)
+                                            .join("")
+                                        + ", "
+                                        + raw
+                                        + ")",
+                                ],
+                            );
+                }
+            });
+            val stop = names.indexOf("stopOnFirst") >= 0;
+            if (stop && fieldCalls.length < 2)
+                problem = "#[stopOnFirst] on field `"
+                    + f.name
+                    + "` of `"
+                    + compiler.name(decl)!
+                    + "`: it skips the checks after the first failure, and this field has fewer than two";
+            var elements: Array<string> = [];
+            var k = 0;
+            while (k < fieldCalls.length) {
+                val c = fieldCalls.slice(k, k + 1).join("");
+                val g = fieldGuards.slice(k, k + 1).join("");
+                if (stop)
+                    elements.push(
+                        if (g == "")
+                            c
+                        else
+                            "Violation.onlyIf(" + g + ", " + c + ")",
+                    );
+                val guarded = if (g == "") "" else "if (" + g + ") ";
+                if (stop == false)
+                    calls.push("    "
+                        + guarded
+                        + "__vs = __vs.append("
+                        + c
+                        + ");");
+                k = k + 1;
             }
-        });
-        val stop = names.indexOf("stopOnFirst") >= 0;
-        if (stop && fieldCalls.length < 2)
-            problem = "#[stopOnFirst] on field `"
-                + f.name
-                + "` of `"
-                + compiler.name(decl)!
-                + "`: it skips the checks after the first failure, and this field has fewer than two";
-        var elements: Array<string> = [];
-        var k = 0;
-        while (k < fieldCalls.length) {
-            val c = fieldCalls.slice(k, k + 1).join("");
-            val g = fieldGuards.slice(k, k + 1).join("");
             if (stop)
-                elements.push(
-                    if (g == "")
-                        c
-                    else
-                        "Violation.onlyIf(" + g + ", " + c + ")",
-                );
-            val guarded = if (g == "") "" else "if (" + g + ") ";
-            if (stop == false)
-                calls.push("    " + guarded + "__vs = __vs.append(" + c + ");");
-            k = k + 1;
-        }
-        if (stop)
-            calls.push(
-                "    __vs = __vs.append(Violation.firstFailing(["
-                    + elements.join(", ")
-                    + "]));",
-            )
-    });
+                calls.push(
+                    "    __vs = __vs.append(Violation.firstFailing(["
+                        + elements.join(", ")
+                        + "]));",
+                )
+        });
     compiler.addMember(
         "pub fn validate(self: Self) -> ValidationReport {\n    val v = self;\n    var __vs: Array<Violation> = [];\n"
             + calls.join("\n")
@@ -394,7 +427,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) {
 // table publishes.
 //
 // There is no `#[future]` in this module: the name reads as the `future`
-// effect annotation that decision 118 removed (a `-> @Task<…>` return replaced it),
+// effect annotation that decision 118 removed (a `-> Async<…>` return replaced it),
 // and a marker that looks like a removed effect is a trap. The temporal markers
 // are `#[pastDate]` and `#[futureDate]`.
 
@@ -493,7 +526,8 @@ pub fn futureDate(syntax decl: unknown) {
 pub fn constraint(syntax decl: unknown, comptime name: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[constraint] must annotate a field", at: decl);
-    if (name == "") compiler.fail("#[constraint]: the name may not be empty", at: decl);
+    if (name == "")
+        compiler.fail("#[constraint]: the name may not be empty", at: decl);
     if (name.indexOf(";") >= 0 || name.indexOf("|") >= 0)
         compiler.fail(
             "#[constraint]: a name may not contain ';' or '|' - those are the constraint table's record and field separators",
@@ -840,7 +874,8 @@ pub fn emailUnicode(syntax decl: unknown) {
 }
 
 pub fn uuid(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[uuid] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[uuid] must annotate a field", at: decl);
 }
 
 pub fn uuidV(syntax decl: unknown, comptime version: i32) {
@@ -851,11 +886,13 @@ pub fn uuidV(syntax decl: unknown, comptime version: i32) {
 }
 
 pub fn guid(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[guid] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[guid] must annotate a field", at: decl);
 }
 
 pub fn url(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[url] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[url] must annotate a field", at: decl);
 }
 
 pub fn urlHost(syntax decl: unknown, comptime hostname: string) {
@@ -883,7 +920,8 @@ pub fn hostname(syntax decl: unknown) {
 }
 
 pub fn e164(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[e164] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[e164] must annotate a field", at: decl);
 }
 
 pub fn emoji(syntax decl: unknown) {
@@ -902,11 +940,13 @@ pub fn base64url(syntax decl: unknown) {
 }
 
 pub fn hex(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[hex] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[hex] must annotate a field", at: decl);
 }
 
 pub fn jwt(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[jwt] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[jwt] must annotate a field", at: decl);
 }
 
 pub fn jwtAlg(syntax decl: unknown, comptime alg: string) {
@@ -922,7 +962,8 @@ pub fn nanoid(syntax decl: unknown) {
 }
 
 pub fn cuid(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[cuid] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[cuid] must annotate a field", at: decl);
 }
 
 pub fn cuid2(syntax decl: unknown) {
@@ -931,19 +972,23 @@ pub fn cuid2(syntax decl: unknown) {
 }
 
 pub fn ulid(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ulid] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[ulid] must annotate a field", at: decl);
 }
 
 pub fn ipv4(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ipv4] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[ipv4] must annotate a field", at: decl);
 }
 
 pub fn ipv6(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[ipv6] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[ipv6] must annotate a field", at: decl);
 }
 
 pub fn mac(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[mac] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[mac] must annotate a field", at: decl);
 }
 
 // One character that is not a hex digit — a delimiter that were one would
@@ -982,7 +1027,8 @@ pub fn currencyCode(syntax decl: unknown) {
 }
 
 pub fn iban(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[iban] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[iban] must annotate a field", at: decl);
 }
 
 fn isHashAlgorithm(a: string) -> bool {
@@ -994,7 +1040,8 @@ fn isHashAlgorithm(a: string) -> bool {
 }
 
 pub fn hash(syntax decl: unknown, comptime algorithm: string) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[hash] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[hash] must annotate a field", at: decl);
     if (isHashAlgorithm(algorithm) == false)
         compiler.fail(
             "#[hash]: the algorithm is one of md5, sha1, sha256, sha384, sha512",
@@ -1014,9 +1061,7 @@ pub fn hashEnc(
             "#[hashEnc]: the algorithm is one of md5, sha1, sha256, sha384, sha512",
             at: decl,
         );
-    if (encoding != "hex"
-        && encoding != "base64"
-        && encoding != "base64url")
+    if (encoding != "hex" && encoding != "base64" && encoding != "base64url")
         compiler.fail("#[hashEnc]: the encoding is one of hex, base64, base64url", at: decl);
 }
 
@@ -1078,11 +1123,13 @@ pub fn isoDuration(syntax decl: unknown) {
 // `i64` field takes a whole number, an `f64` field any number — a fraction on
 // an integer field is refused at the argument.
 pub fn gt<T>(syntax decl: T, comptime value: T) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[gt] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[gt] must annotate a field", at: decl);
 }
 
 pub fn lt<T>(syntax decl: T, comptime value: T) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[lt] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[lt] must annotate a field", at: decl);
 }
 
 pub fn negative(syntax decl: unknown) {
@@ -1184,11 +1231,11 @@ pub fn markerNames() -> Array<string> {
 // The type is the only schema. `#[validated]` gives it, beside `validate()`
 // and `constraints()`, the members that read and write it:
 //
-//     pub fn parse(input: Json) -> @Result<Self, ValidationReport>        // Player.parse(doc)
-//     pub fn parseAt(input: Json, at: string) -> @Result<Self, ValidationReport>
-//     pub fn decode(text: string) -> @Result<Self, ValidationReport>
-//     pub fn bind(pairs: Array<#(string, string)>) -> @Result<Self, ValidationReport>
-//     pub fn encode(v: Self) -> @Result<Json, ValidationReport>
+//     pub fn parse(input: Json) -> Result<Self, ValidationReport>        // Player.parse(doc)
+//     pub fn parseAt(input: Json, at: string) -> Result<Self, ValidationReport>
+//     pub fn decode(text: string) -> Result<Self, ValidationReport>
+//     pub fn bind(pairs: Array<#(string, string)>) -> Result<Self, ValidationReport>
+//     pub fn encode(v: Self) -> Result<Json, ValidationReport>
 //     pub fn jsonSchema() -> string
 //     pub fn options() -> Array<string>                                  // an enum
 //
@@ -1403,7 +1450,7 @@ fn schemaCall(
 }
 
 fn schemaResult(t: string) -> string {
-    return "(input: Json, at: string) -> @Result<"
+    return "(input: Json, at: string) -> Result<"
         + t
         + ", ValidationReport> {\n";
 }
@@ -1567,7 +1614,7 @@ fn schemaTupleFn(
 //
 // `T.__json(v) -> Json` writes a value as the document its decoder reads, by
 // the same name contract (`ThatType.__json` for a field of another
-// `#[validated]` type); `T.encode(v) -> @Result<Json, ValidationReport>` runs
+// `#[validated]` type); `T.encode(v) -> Result<Json, ValidationReport>` runs
 // the type's own checks first — refinements run in both directions — and
 // a value that fails them is an `Error`, not a document. Each part below a
 // field's level gets one emitted function, `__encode<Record>_<field>_<place>`,
@@ -1732,7 +1779,7 @@ fn encEnumMembers(
             + "\n    };\n}",
         "pub fn encode(v: "
             + name
-            + ") -> @Result<Json, ValidationReport> {\n    return "
+            + ") -> Result<Json, ValidationReport> {\n    return "
             + name
             + ".__json(v);\n}",
     ];
@@ -2170,12 +2217,12 @@ fn unquoted(l: string) -> string {
 // `decode` hands `derived.decodeText` the member `T.parseAt` as a value.
 fn schemaCommonMembers(name: string) -> Array<string> {
     return [
-        "pub fn parse(input: Json) -> @Result<"
+        "pub fn parse(input: Json) -> Result<"
             + name
             + ", ValidationReport> {\n    return try "
             + name
             + ".parseAt(input, \"\");\n}",
-        "pub fn decode(text: string) -> @Result<"
+        "pub fn decode(text: string) -> Result<"
             + name
             + ", ValidationReport> {\n    return try derived.decodeText(text, "
             + name
@@ -2874,7 +2921,7 @@ fn parsing(
         ""
     else
         "    val __shape = derived.objectProblems(input, at);\n    if (__shape.length > 0) { throw ValidationReport(violations: __shape); }\n";
-    val parseAt = "pub fn parseAt(input: Json, at: string) -> @Result<"
+    val parseAt = "pub fn parseAt(input: Json, at: string) -> Result<"
         + name
         + ", ValidationReport> {\n"
         + shape
@@ -2904,7 +2951,7 @@ fn parsing(
         + ";\n}";
     val encode = "pub fn encode(v: "
         + name
-        + ") -> @Result<Json, ValidationReport> {\n    val __checked = v.validate();\n    if (__checked.violations.length > 0) { throw __checked; }\n    return "
+        + ") -> Result<Json, ValidationReport> {\n    val __checked = v.validate();\n    if (__checked.violations.length > 0) { throw __checked; }\n    return "
         + name
         + ".__json(v);\n}";
     val formInput = if (transparent)
@@ -2915,7 +2962,7 @@ fn parsing(
             + "\") ?? Json.Null)"
     else
         "derived.formDocument(pairs, [" + hints.join(", ") + "])";
-    val bind = "pub fn bind(pairs: Array<#(string, string)>) -> @Result<"
+    val bind = "pub fn bind(pairs: Array<#(string, string)>) -> Result<"
         + name
         + ", ValidationReport> {\n    return try "
         + name
@@ -2970,7 +3017,8 @@ fn helperFns(text: string) -> Array<string> {
 // `#[tag("status")]` beside `#[validated]` on an enum: the member that names the
 // variant. `#[validated]` reads it.
 pub fn tag(syntax decl: unknown, comptime member: string) {
-    if (compiler.kind(decl) != DeclKind.Type) compiler.fail("#[tag] must annotate a type", at: decl);
+    if (compiler.kind(decl) != DeclKind.Type)
+        compiler.fail("#[tag] must annotate a type", at: decl);
     val problem = textArgProblem("tag", "member name", member);
     if (problem != "") compiler.fail(problem, at: decl);
 }
@@ -2997,7 +3045,8 @@ pub fn stripUnknown(syntax decl: unknown) {
 // `z.looseObject` / `.catchall(T)`: a `Dict<string, T>` field holding every
 // undeclared member, decoded as `T`, in document order.
 pub fn rest(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[rest] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[rest] must annotate a field", at: decl);
 }
 
 // `.exactOptional()`: on a `?T` field, the key may be left out; a key holding
@@ -3062,7 +3111,8 @@ pub fn stringbool(syntax decl: unknown) {
 // The transforms of a text field, applied in the order the field writes them,
 // before its checks run.
 pub fn trim(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[trim] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[trim] must annotate a field", at: decl);
 }
 
 pub fn lowercased(syntax decl: unknown) {
@@ -3078,10 +3128,7 @@ pub fn uppercased(syntax decl: unknown) {
 pub fn normalized(syntax decl: unknown, comptime form: string) {
     if (compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[normalized] must annotate a field", at: decl);
-    if (form != "NFC"
-        && form != "NFD"
-        && form != "NFKC"
-        && form != "NFKD")
+    if (form != "NFC" && form != "NFD" && form != "NFKC" && form != "NFKD")
         compiler.fail("#[normalized]: the form is one of NFC, NFD, NFKC, NFKD", at: decl);
 }
 
@@ -3141,7 +3188,8 @@ pub fn check<T>(
             "#[check] on a type takes the rule, the field it reports at, a message and a code - typed decorator arguments (01-checker step 24), which are not in yet",
             at: decl,
         );
-    if (compiler.kind(decl) != DeclKind.Field && compiler.kind(decl) != DeclKind.Type)
+    if (compiler.kind(decl) != DeclKind.Field
+        && compiler.kind(decl) != DeclKind.Type)
         compiler.fail("#[check] must annotate a field", at: decl);
 }
 
@@ -3150,7 +3198,8 @@ pub fn check<T>(
 // `#[each]`, written again for the next. The marker is named, not written as text: `#[each(email)]`; a decorator that
 // is no marker is refused by `#[validated]`.
 pub fn each(syntax decl: unknown, comptime marker: Decorator) {
-    if (compiler.kind(decl) != DeclKind.Field) compiler.fail("#[each] must annotate a field", at: decl);
+    if (compiler.kind(decl) != DeclKind.Field)
+        compiler.fail("#[each] must annotate a field", at: decl);
 }
 
 // ── step 9: metadata and the JSON Schema ────────────────────────────────────
@@ -3159,28 +3208,32 @@ pub fn each(syntax decl: unknown, comptime marker: Decorator) {
 // annotations of its JSON Schema node. `#[validated]` reads them.
 
 pub fn title(syntax decl: unknown, comptime text: string) {
-    if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
+    if (compiler.kind(decl) != DeclKind.Type
+        && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[title] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("title", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
 pub fn describe(syntax decl: unknown, comptime text: string) {
-    if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
+    if (compiler.kind(decl) != DeclKind.Type
+        && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[describe] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("describe", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
 pub fn example(syntax decl: unknown, comptime text: string) {
-    if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
+    if (compiler.kind(decl) != DeclKind.Type
+        && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[example] must annotate a type or a field", at: decl);
     val problem = metaTextProblem("example", text);
     if (problem != "") compiler.fail(problem, at: decl);
 }
 
 pub fn deprecated(syntax decl: unknown) {
-    if (compiler.kind(decl) != DeclKind.Type && compiler.kind(decl) != DeclKind.Field)
+    if (compiler.kind(decl) != DeclKind.Type
+        && compiler.kind(decl) != DeclKind.Field)
         compiler.fail("#[deprecated] must annotate a type or a field", at: decl);
 }
 
