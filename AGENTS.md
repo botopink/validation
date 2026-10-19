@@ -35,6 +35,7 @@ A `#[validated]` record in a consumer imports only `from "validation"` and
 validation/
 ├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
+├── conformance/      ← the reference (`docs.md`, one section per module) and its `AGENTS.md`; no cell yet, the suite in `test/` holds the behaviour (decisions 457, 463)
 ├── src/
 │   ├── root.bp         pub mod path; report; table; messages; locales; derived; spi; formats; constraints;
 │   │                   binding; codecs; decorators
