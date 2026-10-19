@@ -253,17 +253,13 @@ fn present<T>(v: T) -> ?T {
     return v;
 }
 
-fn absent<T>() -> ?T {
-    return null;
-}
-
 // `?T`: absent decodes to `null`; anything else is the inner decoder's.
 pub fn optionalOf<T>(
     input: Json,
     at: string,
     inner: fn(input: Json, at: string) -> Result<T, ValidationReport>,
 ) -> Result<?T, ValidationReport> {
-    if (isNull(input)) return absent();
+    if (isNull(input)) return null;
     val v = try inner(input, at);
     return present(v);
 }
@@ -558,7 +554,7 @@ pub fn presentOf<T>(
 ) -> Result<?T, ValidationReport> {
     val where = key(at, name);
     val keys = input.members().map({ m -> m[0] });
-    if (keys.indexOf(name) < 0) return absent();
+    if (keys.indexOf(name) < 0) return null;
     val value = input.field(name) ?? Json.Null;
     if (isNull(value))
         throw wrongType(where, "a value, or no key at all", value);

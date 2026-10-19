@@ -95,14 +95,14 @@ fn some<T>(v: T) -> ?T {
     return [v].at(0);
 }
 
-fn nothing<T>() -> ?T {
+fn nothing<T>(comptime t: type<T>) -> ?T {
     val none: Array<T> = [];
     return none.at(0);
 }
 
 test "validation: a generic value becomes an optional through a list" {
     val a: ?string = some("x");
-    val b: ?string = nothing();
+    val b: ?string = nothing(string);
     assert a == "x";
     assert b == null;
 }
