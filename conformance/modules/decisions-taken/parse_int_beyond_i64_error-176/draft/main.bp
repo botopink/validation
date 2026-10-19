@@ -1,3 +1,26 @@
 //// Decision 176 — † `string.parseInt()` of an integer beyond the `i64` range (−2^63 … 2^63 − 1, 319) is `Error` on every target
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.coerce} from "validation";
+import {report.ValidationReport} from "validation";
+
+// An order number arrives as text and is read as an `i64`.
+#[validated]
+pub type Lookup(#[coerce] orderNumber: i64)
+
+fn shown(r: Result<Lookup, ValidationReport>) -> string {
+    return case r {
+        Ok(l) -> "ok " + l.orderNumber.toString();
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print("9223372036854775807".parseInt().isOk());
+    print("9223372036854775808".parseInt().isError());
+    print("-9223372036854775809".parseInt().isError());
+    print(shown(Lookup.bind([#("orderNumber", "9007199254740991")])));
+    print(shown(Lookup.bind([#("orderNumber", "9223372036854775808")])));
+}

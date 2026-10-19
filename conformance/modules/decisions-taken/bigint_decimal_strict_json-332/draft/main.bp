@@ -1,3 +1,38 @@
 //// Decision 332 — Big numbers, and `Json` read like Jackson's strict configuration.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decimal.Decimal} from "std";
+import {decorators.validated, decorators.coerce} from "validation";
+import {report.ValidationReport} from "validation";
+
+// Each field is read by its own type, never truncated or coerced unasked.
+#[validated]
+pub type Order(quantity: i64, serial: bigint, total: Decimal, weight: f64, #[coerce] code: i64)
+
+fn shown(r: Result<Order, ValidationReport>) -> string {
+    return case r {
+        Ok(o) -> o.quantity.toString()
+            + " "
+            + o.serial.toString()
+            + " "
+            + o.total.toString()
+            + " "
+            + o.weight.toString()
+            + " "
+            + o.code.toString();
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Order.decode("""{"quantity": 3, "serial": 123456789012345678901234567890, "total": 19.90, "weight": 1.25, "code": "42"}""")));
+    print(shown(Order.decode("""{"quantity": 1.5, "serial": 7, "total": 1, "weight": 2, "code": "1"}""")));
+    print(shown(Order.decode("""{"quantity": 9223372036854775808, "serial": 1.5, "total": "1", "weight": "2", "code": "x"}""")));
+
+    val a = try Order.decode("""{"quantity": 1, "serial": 1, "total": 19.90, "weight": 1, "code": "1"}""") catch null;
+    val b = try Order.decode("""{"quantity": 1, "serial": 1, "total": 19.9, "weight": 1, "code": "1"}""") catch null;
+    print(a?.total
+        == b?.total, a?.total.toString() ?? "", b?.total.toString() ?? "");
+}

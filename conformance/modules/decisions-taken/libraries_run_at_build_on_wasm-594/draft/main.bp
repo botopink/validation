@@ -1,3 +1,19 @@
 //// Decision 594 — Every library runs at build on the wasm comptime runtime (434), jhonstart first; a function only Erlang or Node can run is a located error there.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.email, decorators.minLength} from "validation";
+
+#[validated]
+pub type Signup(#[email] email: string, #[minLength(8)] password: string)
+
+pub fn main() -> void {
+    // Computed at build, on the wasm comptime runtime, whatever the target.
+    val table = comptime Signup.constraints();
+    val schema = comptime Signup.jsonSchema();
+    val sample = comptime Signup
+        .decode("""{"email": "ana@example.com", "password": "correct horse"}""")
+        .isOk();
+
+    print(table);
+    print(schema == Signup.jsonSchema(), sample);
+}

@@ -1,3 +1,38 @@
 //// Decision 406 — 244 holds for decorators: `#[check]`'s `message` comes first and is required; on a field the rule is `#[refine(rule)]`, a field marker like the others.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.refine, decorators.message} from "validation";
+
+fn passwordsMatch(a: Booking) -> bool {
+    return a.password == a.confirm;
+}
+
+fn handleFree(a: Booking) -> bool {
+    return a.handle != "admin";
+}
+
+fn isEven(n: i32) -> bool {
+    return n % 2 == 0;
+}
+
+// On the type: the message first, required, then the rule and where it reports.
+// On a field: `#[refine(rule)]`, a marker like the others, its text from the
+// field's message order.
+#[validated, check("the passwords differ", passwordsMatch, at: .confirm), check("that handle is taken", handleFree, at: .handle)]
+pub type Booking(
+    handle: string,
+    password: string,
+    confirm: string,
+    #[refine(isEven)] #[message("must be even")] seats: i32,
+    #[refine(isEven)] tables: i32,
+)
+
+pub fn main() -> void {
+    val good = Booking(handle: "ana", password: "s3cret", confirm: "s3cret", seats: 4, tables: 2);
+    print(good.validate().isValid());
+
+    val bad = Booking(handle: "admin", password: "s3cret", confirm: "secret", seats: 3, tables: 5);
+    for (bad.validate().violations) { v ->
+        print(v.field + " " + v.code + ": " + v.message);
+    }
+}

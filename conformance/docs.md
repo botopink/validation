@@ -32,6 +32,7 @@ or a manifest is not a program and is fenced as `text`. The library's behaviour 
 | *`codecs`* | the codec recipes |
 | *`derived`* | the machinery the members `#[validated]` adds call |
 | *Departures* | where the source still writes a form the rules in force have replaced |
+| Decisions | `modules/decisions-taken/`: the ledger's index, one `<slug>-<N>/` per code-bearing row of [`../decisions-taken.md`](../decisions-taken.md) (front 166, decisions 646–651), its `docs.md` walking through one example program; in phase 1 the program is `draft/main.bp`, not yet a cell |
 
 ## Loading
 

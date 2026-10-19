@@ -1,0 +1,6 @@
+//// A module of the program's own package: `forms`, its path its name.
+
+import {decorators.validated, decorators.email, decorators.minLength} from "validation";
+
+#[validated]
+pub type Signup(#[email] email: string, #[minLength(8)] password: string)

@@ -1,0 +1,3 @@
+//// The program's audit log: a `Violation` of its own, another shape than validation's.
+
+pub type Violation(rule: string, at: string, severity: i32)

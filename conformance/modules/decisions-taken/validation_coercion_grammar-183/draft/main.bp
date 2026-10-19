@@ -1,3 +1,36 @@
 //// Decision 183 — † `validation`'s coercion is a grammar per target type, the same on erlang and commonJS: `bool` reads the `stringbool` s
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.coerce} from "validation";
+import {report.ValidationReport} from "validation";
+
+// A query string's values arrive as text; `#[coerce]` reads each by its field's type.
+#[validated]
+pub type Search(
+    #[coerce] page: i32,
+    #[coerce] ratio: f64,
+    #[coerce] exact: bool,
+    #[coerce] limit: ?i32,
+)
+
+fn read(pairs: #(string, string)[]) -> string {
+    return case Search.bind(pairs) {
+        Ok(s) -> s.page.toString()
+            + " "
+            + s.ratio.toString()
+            + " "
+            + s.exact.toString()
+            + " "
+            + (s.limit?.toString() ?? "none");
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(read([#("page", "2"), #("ratio", "1.5e1"), #("exact", "Yes"), #("limit", "")]));
+    print(read([#("page", "7"), #("ratio", "0.25"), #("exact", "off"), #("limit", "10")]));
+    print(read([#("page", "two"), #("ratio", "1"), #("exact", "maybe"), #("limit", "x")]));
+    print(read([#("page", ""), #("ratio", "1"), #("exact", "0")]));
+}

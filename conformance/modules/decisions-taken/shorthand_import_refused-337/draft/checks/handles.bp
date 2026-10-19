@@ -1,0 +1,9 @@
+//// A module of the program's own package: `checks.handles`, its path its name.
+
+pub fn notReserved(handle: string) -> bool {
+    return !["admin", "root"].contains(handle);
+}
+
+pub fn reservedCount() -> i32 {
+    return 2;
+}

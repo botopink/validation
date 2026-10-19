@@ -1,3 +1,41 @@
 //// Decision 598 — `compiler.Field<T>` carries a field's default as `defaultValue`: the default as written, `null` when the field has none.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {io.clock} from "std";
+import {decorators.validated, decorators.minValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+// A field's default is code: `#[validated]` reads it at build and the decoder
+// evaluates it, where the record is built, whenever the key is absent.
+#[validated]
+pub type Subscription(
+    email: string,
+    plan: string = "free",
+    #[minValue(1)] seats: i32 = 1,
+    nickname: ?string = null,
+    startedAt: i64 = clock.now(),
+)
+
+fn shown(r: Result<Subscription, ValidationReport>) -> string {
+    return case r {
+        Ok(s) -> s.email
+            + " "
+            + s.plan
+            + " "
+            + s.seats.toString()
+            + " "
+            + (s.nickname ?? "-")
+            + " "
+            + (s.startedAt > 0).toString();
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Subscription.decode("""{"email": "ana@example.com"}""")));
+    print(shown(Subscription.decode("""{"email": "bo@example.com", "plan": "pro", "seats": 5, "nickname": "bo", "startedAt": 7}""")));
+    print(shown(Subscription.decode("""{"email": "cy@example.com", "seats": 0}""")));
+    print(shown(Subscription.decode("""{"plan": "pro"}""")));
+}

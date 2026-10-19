@@ -1,3 +1,40 @@
 //// Decision 144 — A `#[validated]` record (306) refuses a key it does not declare: a violation coded `unrecognizedKey`, at the key's own p
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {collections.Dict} from "std";
+import {decorators.validated, decorators.stripUnknown, decorators.rest} from "validation";
+import {report.ValidationReport} from "validation";
+
+// The default: a key the type does not declare is refused.
+#[validated]
+pub type Contact(name: string, phone: string)
+
+// The type says otherwise, located on the type: undeclared keys are dropped.
+#[validated]
+#[stripUnknown]
+pub type Lenient(name: string)
+
+// Or held, in the one field marked `#[rest]`.
+#[validated]
+pub type Tagged(name: string, #[rest] extra: Dict<string, string>)
+
+fn located<T>(r: Result<T, ValidationReport>) -> string {
+    return case r {
+        Ok(_) -> "ok";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    val text = """{"name": "ana", "phone": "123", "admin": "yes"}""";
+    print(located(Contact.decode(text)));
+    print(located(Contact.decode("""{"name": "ana", "phone": "123"}""")));
+
+    val kept = try Lenient.decode(text) catch Lenient(name: "");
+    print(kept.name);
+
+    val tagged = try Tagged.decode(text) catch Tagged(name: "", extra: Dict.empty());
+    print(tagged.extra.keys().join(","));
+}

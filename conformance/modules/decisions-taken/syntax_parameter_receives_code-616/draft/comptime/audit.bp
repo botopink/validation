@@ -1,0 +1,12 @@
+//// The program's build layer: a decorator of its own, beside validation's.
+
+import {compiler} from "std";
+
+// `decl` receives the annotated declaration as it was written; `team` a value
+// known at build.
+pub fn owned<T>(syntax decl: T, comptime team: string) -> void {
+    val name = compiler.name(decl) ?? "?";
+    compiler.addMember("owner", fn(self: T) -> string {
+        return name + " belongs to " + team;
+    });
+}

@@ -1,3 +1,36 @@
 //// Decision 327 — `#[validated]`'s parse half are members of the type, named without the type's name:
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {Json, decode, encode} from "json";
+import {decorators.validated, decorators.notBlank, decorators.minValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Player(#[notBlank] name: string, #[minValue(0)] score: i32)
+
+fn shown(r: Result<Player, ValidationReport>) -> string {
+    return case r {
+        Ok(p) -> p.name + "=" + p.score.toString();
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    val doc = try decode("""{"name": "ana", "score": 7}""") catch Json.Null;
+    print(shown(Player.parse(doc)));
+
+    val bad = try decode("""{"name": "", "score": -1}""") catch Json.Null;
+    print(shown(Player.parseAt(bad, "players[2]")));
+
+    print(shown(Player.decode("""{"name": "bo", "score": 3}""")));
+    print(shown(Player.bind([#("name", "cy"), #("score", "12")])));
+
+    val written = try Player.encode(Player(name: "di", score: 5)) catch Json.Null;
+    print(encode(written));
+    print(Player.encode(Player(name: "", score: 5)).isError());
+
+    print(Player(name: "ed", score: 1).validate().isValid());
+    print(Player.jsonSchema().startsWith("{\"$schema\""));
+}

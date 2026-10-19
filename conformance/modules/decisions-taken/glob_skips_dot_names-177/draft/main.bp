@@ -1,3 +1,42 @@
 //// Decision 177 — † `fs.glob`, one rule on both targets: `*` and `**` do not match a name that starts with `.` unless the pattern writes t
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {io.fs} from "std";
+import {decorators.validated, decorators.notBlank} from "validation";
+
+// Each configuration file is one `Service`.
+#[validated]
+pub type Service(#[notBlank] name: string, port: i32)
+
+fn write(path: string, text: string) -> void {
+    fs.writeText(path, text);
+}
+
+fn loaded(root: string, pattern: string) -> string {
+    val paths = fs.glob(pattern, root).unwrapOr([]);
+    return paths
+        .map({ p ->
+            val text = fs.readText(root + "/" + p).unwrapOr("");
+            val mark = if (Service.decode(text).isOk()) "" else " (invalid)";
+            p + mark
+        })
+        .join(", ");
+}
+
+pub fn main() -> void {
+    val root = "build/glob-services";
+    fs.removeTree(root);
+    fs.mkdirRecursive(root + "/nested");
+    write(root + "/api.json", """{"name": "api", "port": 8080}""");
+    write(root + "/.draft.json", """{"name": "", "port": 0}""");
+    write(root + "/nested/db.json", """{"name": "db", "port": 5432}""");
+    write(root + "/nested/.cache.json", """{"name": "cache", "port": 6379}""");
+
+    // `*` and `**` skip a name that starts with a dot...
+    print(loaded(root, "*.json"));
+    print(loaded(root, "**/*.json"));
+    // ...unless the pattern writes the dot.
+    print(loaded(root, ".*.json"));
+    print(loaded(root, "**/.*.json"));
+    fs.removeTree(root);
+}

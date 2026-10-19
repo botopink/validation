@@ -1,3 +1,15 @@
 //// Decision 250 — † std's `io.random.bool()` is dropped, not renamed; `coin()` is the boolean draw
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {io.random} from "std";
+import {decorators.validated} from "validation";
+
+#[validated]
+pub type Sample(id: string, inControlGroup: bool)
+
+pub fn main() -> void {
+    // `coin()` is the boolean draw.
+    val draws = ["a", "b", "c", "d"].map({ id -> Sample(id: id, inControlGroup: random.coin()) });
+    val written = draws.map({ s -> Sample.encode(s).isOk() });
+    print(written.all({ ok -> ok }), draws.length);
+}

@@ -1,3 +1,45 @@
 //// Decision 281 — No code identifier passes as a string.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.refine, decorators.orElse, decorators.pattern, decorators.schemaId, decorators.message} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Plan { Free, Pro }
+
+fn notReserved(handle: string) -> bool {
+    return handle != "admin";
+}
+
+fn proNeedsCompany(s: Signup) -> bool {
+    return s.plan != Plan.Pro || s.company != "";
+}
+
+// Code is named by the thing itself: the rule functions, the field `.company`,
+// the variant `.Free`. Text is what belongs to another system: the regex, the
+// schema's URL, the words a user reads.
+#[validated, check("a pro plan needs a company", proNeedsCompany, at: .company)]
+#[schemaId("https://example.com/schemas/signup.json")]
+pub type Signup(
+    #[pattern("^[a-z0-9_]+$")] #[refine(notReserved)] #[message("that handle is reserved")] handle: string,
+    #[orElse(.Free)] plan: Plan,
+    company: string,
+)
+
+fn shown(r: Result<Signup, ValidationReport>) -> string {
+    return case r {
+        Ok(s) -> "ok " + s.handle;
+        Error(report) -> report.violations
+            .map({ v -> v.field + ": " + v.message })
+            .join(" | ");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Signup.decode("""{"handle": "ana_1", "company": ""}""")));
+    print(shown(Signup.decode("""{"handle": "ana_1", "plan": "Pro", "company": ""}""")));
+    print(shown(Signup.decode("""{"handle": "admin", "company": ""}""")));
+    print(Signup
+        .jsonSchema()
+        .contains("https://example.com/schemas/signup.json"));
+}

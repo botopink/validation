@@ -1,3 +1,37 @@
 //// Decision 641 — (b) for the names, and no contract with one implementor: every primitive type is written lowercase — `i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `string`, `bigint`, `bytes`, `array<T>` — and a capitalised name is a contract shared by several types (`Number`, `Integer`, `Signed`, `Float`); `String`, `Bool`, `BigInt`, `Bytes` and `Array` dissolve into their types, which hold their methods and statics.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {collections.Dict, collections.Set} from "std";
+import {decorators.validated, decorators.minLength, decorators.notEmpty} from "validation";
+
+// Every primitive is written lowercase: `string`, `i32`, `i64`, `f64`, `bool`,
+// and `T[]` for `array<T>`. A capitalised name is a contract or another type.
+#[validated]
+pub type Survey(
+    #[minLength(3)] title: string,
+    responses: i32,
+    totalMillis: i64,
+    score: f64,
+    open: bool,
+    #[notEmpty] options: string[],
+    tags: Set<string>,
+    weights: Dict<string, f64>,
+)
+
+pub fn main() -> void {
+    val letters = array.range(0, 3).map({ i -> string.fromCodepoint(65 + i) });
+    val survey = Survey(
+        title: "Lunch",
+        responses: 12,
+        totalMillis: 90000,
+        score: 4.5,
+        open: true,
+        options: letters,
+        tags: Set.fromList(["food"]),
+        weights: Dict.empty(),
+    );
+    print(survey.options.join(""), survey.validate().isValid());
+    print(Survey
+        .decode("""{"title": "no", "responses": 1, "totalMillis": 1, "score": 1, "open": false, "options": [], "tags": [], "weights": {}}""")
+        .isError());
+}

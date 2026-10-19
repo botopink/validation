@@ -1,3 +1,20 @@
 //// Decision 399 — `validation`'s JSON Schema documents are checked against the 2020-12 meta-schema by a vendored validator — in the tests only.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {Json, decode} from "json";
+import {decorators.validated, decorators.email, decorators.minLength, decorators.title} from "validation";
+
+#[validated]
+#[title("Signup")]
+pub type Signup(#[email] email: string, #[minLength(8)] password: string, nickname: ?string)
+
+pub fn main() -> void {
+    // The document a consumer publishes. The suite holds every document the
+    // library emits to the 2020-12 meta-schema; the program ships no validator.
+    val doc = try decode(Signup.jsonSchema()) catch Json.Null;
+    print(doc.field("$schema")?.str() ?? "");
+    print(doc.field("type")?.str() ?? "");
+    val required: Json[] = doc.field("required")?.items() ?? [];
+    print(required.map({ r -> r.str() }).join(","));
+    print(doc.field("additionalProperties")?.kindName() ?? "");
+}

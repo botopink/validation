@@ -1,3 +1,37 @@
 //// Decision 622 — Every function writes its return type, `-> void` included: `fn m(self: Self) -> void { … }`, `pub fn main() -> void { … }`; a `fn` with no `->` is refused at its name, `fn-return-missing`, `write -> void, or the type it answers`.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.minValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Cart(#[minValue(1)] items: i32, cents: i64) {
+    // A method writes its return type like any function.
+    pub fn total(self: Self) -> string {
+        return "R$ " + (self.cents / 100).toString();
+    }
+
+    pub fn describe(self: Self) -> void {
+        print(self.items.toString() + " items, " + self.total());
+    }
+}
+
+fn read(text: string) -> Result<Cart, ValidationReport> {
+    return Cart.decode(text);
+}
+
+fn report(r: Result<Cart, ValidationReport>) -> void {
+    case r {
+        Ok(cart) -> cart.describe();
+        Error(problems) -> print(problems.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(","));
+    }
+}
+
+pub fn main() -> void {
+    val atLeastOne = fn(c: Cart) -> bool { c.items >= 1 };
+    report(read("""{"items": 2, "cents": 4500}"""));
+    report(read("""{"items": 0, "cents": 0}"""));
+    print(atLeastOne(Cart(items: 3, cents: 100)));
+}

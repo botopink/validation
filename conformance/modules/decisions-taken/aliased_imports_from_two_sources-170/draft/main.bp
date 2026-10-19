@@ -1,3 +1,21 @@
 //// Decision 170 — std takes the natural name and a library's copy goes (`clock.parseDuration`, `async.RetryPolicy`, `async.nextDelay`; rak
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.url, decorators.notBlank} from "validation";
+import {report.Violation as FieldViolation} from "validation";
+import {audit.Violation as AuditEntry};
+
+#[validated]
+pub type Link(#[notBlank] title: string, #[url] href: string)
+
+fn logged(v: FieldViolation) -> AuditEntry {
+    return AuditEntry(rule: v.code, at: v.field, severity: 1);
+}
+
+pub fn main() -> void {
+    val found: FieldViolation[] = Link(title: "", href: "not a url").validate().violations;
+    val entries = found.map({ v -> logged(v) });
+    for (entries) { e ->
+        print(e.at + " " + e.rule + " " + e.severity.toString());
+    }
+}

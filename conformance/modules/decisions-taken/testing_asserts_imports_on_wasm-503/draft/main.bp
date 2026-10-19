@@ -1,3 +1,32 @@
 //// Decision 503 — `testing.asserts` imports on wasm, its API unchanged; `matches` waits on std's regex there, a located refusal until then. Amends 146.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {testing.asserts, failure.panic} from "std";
+import {decorators.validated, decorators.email, decorators.minLength} from "validation";
+
+#[validated]
+pub type Signup(#[email] email: string, #[minLength(8)] password: string)
+
+// A self-check of the constraint table, run at build: on the wasm comptime runtime.
+fn tableProblems() -> string[] {
+    val table = Signup.constraints();
+    val checks = [
+        asserts.contains(table, "\"code\":\"email\""),
+        asserts.contains(table, "\"min\":8"),
+        asserts.notContains(table, "maxLength"),
+        asserts.deepEquals(["email", "password"], ["email", "password"]),
+        asserts.throwsWith({ -> panicked() }, "no table"),
+    ];
+    return checks
+        .filter({ r -> r.isError() })
+        .map({ r -> asserts.errorText(r) });
+}
+
+fn panicked() -> string {
+    panic("no table");
+}
+
+pub fn main() -> void {
+    val problems = comptime tableProblems();
+    print(problems.length);
+}

@@ -1,3 +1,25 @@
 //// Decision 175 — † `hash.pbkdf2Sha256(password, salt, iterations, length)` derives over the salt's UTF-8 bytes, the same on node and erla
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {hash} from "std";
+import {decorators.validated, decorators.minLength, decorators.notBlank} from "validation";
+import {report.ValidationReport} from "validation";
+
+// A credential is checked before it is derived.
+#[validated]
+pub type Credential(#[minLength(8)] password: string, #[notBlank] salt: string)
+
+fn derive(text: string) -> string {
+    return case Credential.decode(text) {
+        Ok(c) -> hash.pbkdf2Sha256(c.password, c.salt, 1, 32);
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(derive("""{"password": "password", "salt": "salt"}"""));
+    print(derive("""{"password": "pässwörd", "salt": "sälz"}"""));
+    print(derive("""{"password": "short", "salt": ""}"""));
+}

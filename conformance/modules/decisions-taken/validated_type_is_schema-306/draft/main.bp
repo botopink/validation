@@ -1,3 +1,33 @@
 //// Decision 306 — The type is the only schema, and `#[schema]` becomes `#[validated]`.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.transparent, decorators.email, decorators.minValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+// The one declaration: the record a handler works with is also what checks it,
+// parses it and describes it.
+#[validated]
+pub type Signup(#[email] email: string, #[minValue(18)] age: i32)
+
+// A one-field record written and read as its field.
+#[validated(transparent)]
+pub type Email(#[email] value: string)
+
+fn problems(r: Result<Signup, ValidationReport>) -> string {
+    return case r {
+        Ok(s) -> "ok " + s.email;
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(problems(Signup.decode("""{"email": "ana@example.com", "age": 30}""")));
+    print(problems(Signup.decode("""{"email": "nope", "age": 12}""")));
+    print(Signup(email: "ana@example.com", age: 15).validate().isValid());
+    print(Signup.constraints());
+    val address = try Email.decode("\"bo@example.com\"") catch Email(value: "");
+    print(address.value);
+    print(Email.decode("\"bo\"").isError());
+}

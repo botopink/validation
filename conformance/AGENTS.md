@@ -17,5 +17,10 @@ behaviour is held by the suite in `../test/` until its cells are written.
   - *`codecs`* — the codec recipes.
   - *`derived`* — the machinery the emitted members call.
   - *Departures* — where the source still writes a form the rules in force have replaced.
-- `modules/decisions-taken/<slug>-<N>/` — front 166's decision cells, when a row of `../decisions-taken.md` calls for one;
-  that subtree is front 166's alone (651). None exists yet.
+- `modules/decisions-taken/<slug>-<N>/` — front 166's decision cells (decision 651: the subtree is that front's alone): one
+  per code-bearing row of `../decisions-taken.md`, a `docs.md` (first line generated) and, in phase 1, `draft/main.bp` (decision
+  649; its `////` header generated) and any `draft/<other>.bp` the example needs — no `src/`, no manifest, so `botopink cell
+  check` finds no cell there; `scripts/decision-cells.py compile validation` (meta) builds the drafts, `promote` (166 s4) turns
+  them into cells.
+- `modules/botopink.json` — the workspace manifest the decision cells compile under (`workspaces: ["*"]`, the library's
+  targets, `validation` by path); front 166's too.

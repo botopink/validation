@@ -1,3 +1,28 @@
 //// Decision 404 — Two annotations never add one member name: a decorator adds and never merges or replaces (216); several annotations reach one member through typed meta.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.notBlank} from "validation";
+
+fn passwordsMatch(a: Account) -> bool {
+    return a.password == a.confirm;
+}
+
+fn handleFree(a: Account) -> bool {
+    return a.handle != "admin";
+}
+
+// Three annotations reach one member: each `#[check]` records a value, and
+// `#[validated]` alone writes `validate`.
+#[validated, check("the passwords differ", passwordsMatch, at: .confirm), check("that handle is taken", handleFree, at: .handle)]
+pub type Account(#[notBlank] handle: string, password: string, confirm: string)
+
+fn shown(a: Account) -> string {
+    val vs = a.validate().violations;
+    return vs.length.toString() + " " + vs.map({ v -> v.field }).join(",");
+}
+
+pub fn main() -> void {
+    print(shown(Account(handle: "ana", password: "abc", confirm: "abc")));
+    print(shown(Account(handle: "admin", password: "abc", confirm: "abd")));
+    print(shown(Account(handle: "", password: "abc", confirm: "abc")));
+}

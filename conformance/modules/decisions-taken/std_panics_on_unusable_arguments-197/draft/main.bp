@@ -1,3 +1,48 @@
 //// Decision 197 — † (1) erlang's `indexOf` / `lastIndexOf` count codepoints (320).
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {async.RetryPolicy, async.nextDelay} from "std";
+import {hash, failure} from "std";
+import {decorators.validated, decorators.minValue, decorators.positiveOrZero, decorators.maxValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+// A retry policy read from configuration is validated before std sees it:
+// std panics on an unusable one, the report names the field instead.
+#[validated]
+pub type RetryConfig(
+    #[minValue(1)] maxAttempts: i32,
+    #[positiveOrZero] initialMillis: i32,
+    #[minValue(0)] #[maxValue(2147483647)] maxMillis: i32,
+)
+
+fn policyOf(c: RetryConfig) -> RetryPolicy {
+    return RetryPolicy(maxAttempts: c.maxAttempts, initialMillis: c.initialMillis.toI64(), multiplier: 2.0, maxMillis: c.maxMillis.toI64());
+}
+
+fn shown(r: Result<RetryConfig, ValidationReport>) -> string {
+    return case r {
+        Ok(c) -> "next " + (nextDelay(policyOf(c), 2)?.toString() ?? "none");
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(RetryConfig.decode("""{"maxAttempts": 3, "initialMillis": 100, "maxMillis": 1000}""")));
+    print(shown(RetryConfig.decode("""{"maxAttempts": 0, "initialMillis": -5, "maxMillis": 1000}""")));
+
+    // What std answers for an unusable policy built in code.
+    val unusable = RetryPolicy(maxAttempts: 0, initialMillis: 100, multiplier: 2.0, maxMillis: 1000);
+    print(nextDelay(unusable, 1) == null);
+
+    // `indexOf` counts code points, alike on every target.
+    print("ação-é".indexOf("é"));
+
+    // An unusable `iterations` is one panic text on every target.
+    val derived = failure.attempt({ -> hash.pbkdf2Sha256("pw", "salt", 0, 32) });
+    print(case derived {
+        Ok(_) -> "derived";
+        Error(f) -> f.message;
+    });
+}

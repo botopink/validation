@@ -1,3 +1,21 @@
 //// Decision 396 — Markdown, YAML and JSON are three libraries of their own — `markdown`, `yaml`, `json` (`botopink/{markdown,yaml,json}` at `repository/{markdown,yaml,json}`, 326's rule) — and std knows nothing of JSON.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {Json, decode, encode, object, quote} from "json";
+import {decorators.validated, decorators.email} from "validation";
+
+#[validated]
+pub type Member(name: string, #[email] email: string)
+
+pub fn main() -> void {
+    val text = object([#("name", quote("ana")), #("email", quote("ana@example.com"))]);
+    val doc = try decode(text) catch Json.Null;
+    val member = try Member.parse(doc) catch Member(name: "", email: "");
+    print(member.name, member.email);
+
+    val written = try Member.encode(member) catch Json.Null;
+    print(encode(written));
+    print(Member
+        .parse(try decode("""{"name": "bo", "email": "bo"}""") catch Json.Null)
+        .isError());
+}

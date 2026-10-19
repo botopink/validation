@@ -1,3 +1,22 @@
 //// Decision 735 — (a): an optional function-typed `comptime` argument is tested against `null` as any `?T` is — `if (rule == null) { … }` — the function type no exception.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {comptime.labels.labelled};
+import {decorators.validated, decorators.email, decorators.minValue} from "validation";
+
+fn seatsText(t: Team) -> string {
+    return t.seats.toString() + " seats";
+}
+
+#[validated, labelled("contact")]
+pub type Contact(#[email] email: string)
+
+#[validated, labelled("team", seatsText)]
+pub type Team(name: string, #[minValue(1)] seats: i32)
+
+pub fn main() -> void {
+    val c = Contact(email: "ana@example.com");
+    val t = Team(name: "core", seats: 4);
+    print(c.label(), c.validate().isValid());
+    print(t.label(), Team(name: "x", seats: 0).validate().isValid());
+}

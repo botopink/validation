@@ -1,3 +1,15 @@
 //// Decision 616 — The parameter modifier `expr` is renamed `syntax`: a parameter marked `syntax` receives the code as it was written — a declaration, an argument expression, a lambda — and `comptime` one receives a value known at build.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {comptime.audit.owned};
+import {decorators.validated, decorators.notBlank, decorators.minValue} from "validation";
+
+#[validated, owned("billing")]
+pub type Invoice(#[notBlank] customer: string, #[minValue(1)] cents: i32)
+
+pub fn main() -> void {
+    val invoice = Invoice(customer: "ana", cents: 1200);
+    print(invoice.owner());
+    print(invoice.validate().isValid());
+    print(Invoice(customer: "", cents: 0).validate().violations.map({ v -> v.field }).join(","));
+}

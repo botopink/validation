@@ -1,3 +1,37 @@
 //// Decision 370 — A decorator hands a parameter's `@Expr` on to the program through two typed channels — typed meta or a typed member — never source text.
 
-pub fn main() -> void {}
+import {compiler, io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.Check} from "validation";
+
+fn passwordsMatch(a: Account) -> bool {
+    return a.password == a.confirm;
+}
+
+fn handleFree(a: Account) -> bool {
+    return a.handle != "admin";
+}
+
+#[validated, check("the passwords differ", passwordsMatch, at: .confirm), check("that handle is taken", handleFree, at: .handle)]
+pub type Account(handle: string, password: string, confirm: string)
+
+// Another reader of the typed meta `#[check]` recorded: a form that shows,
+// before submitting, which rules a draft account still breaks.
+fn pending(a: Account) -> string[] {
+    val checks: Check<Account>[] = comptime compiler
+        .typeInfo(Account)
+        .metaAll(Check);
+    return checks.filter({ c -> !c.rule(a) }).map({ c -> c.message });
+}
+
+pub fn main() -> void {
+    val draft = Account(handle: "admin", password: "abc", confirm: "abd");
+
+    // The typed member `#[validated]` added.
+    print(draft.validate().violations
+        .map({ v -> v.field + ": " + v.message })
+        .join(" | "));
+
+    // The typed meta, read here: each rule is a function value, called at run time.
+    print(pending(draft).join(" | "));
+    print(pending(Account(handle: "ana", password: "abc", confirm: "abc")).length);
+}

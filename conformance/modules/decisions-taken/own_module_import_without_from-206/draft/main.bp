@@ -1,3 +1,19 @@
 //// Decision 206 — `import {…} from "<name>"` resolves only to a package — std, a bundled package or a declared dependency.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {report.ValidationReport} from "validation";
+import {forms.Signup};
+
+fn shown(r: Result<Signup, ValidationReport>) -> string {
+    return case r {
+        Ok(s) -> "welcome " + s.email;
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Signup.decode("""{"email": "ana@example.com", "password": "correct horse"}""")));
+    print(shown(Signup.decode("""{"email": "ana", "password": "short"}""")));
+}

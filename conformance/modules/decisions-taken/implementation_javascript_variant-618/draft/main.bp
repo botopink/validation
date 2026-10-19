@@ -1,3 +1,28 @@
 //// Decision 618 — `Implementation.Node` is renamed `JavaScript`: a source names the language the template is written in, not a runtime.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {compiler} from "std";
+import {decorators.validated, decorators.refine, decorators.notBlank} from "validation";
+
+// A host cell names the language each template is written in.
+#[compiler.external(
+    .Erlang("""byte_size($0)"""),
+    .JavaScript("""Buffer.byteLength($0, "utf8")"""),
+)]
+declare fn utf8Bytes(text: string) -> i32;
+
+fn fitsColumn(text: string) -> bool {
+    return utf8Bytes(text) <= 8;
+}
+
+// The column holds 8 bytes, not 8 characters.
+#[validated]
+pub type Label(#[notBlank] #[refine(fitsColumn)] text: string)
+
+pub fn main() -> void {
+    print(utf8Bytes("ação"));
+    print(Label(text: "café").validate().isValid());
+    print(Label(text: "ação ação").validate().violations
+        .map({ v -> v.field + ":" + v.code })
+        .join(","));
+}

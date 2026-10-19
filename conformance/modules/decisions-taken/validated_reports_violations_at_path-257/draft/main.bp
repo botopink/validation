@@ -1,3 +1,40 @@
 //// Decision 257 — `#[validated]` (306) and its private schema machinery live in `validation`, beside the constraint markers; every failure
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.notBlank, decorators.minLength} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Address(#[notBlank] street: string, city: string)
+
+#[validated]
+pub type Customer(
+    #[minLength(2)] name: string,
+    address: Address,
+    #[minLength(1)] tags: string[],
+    age: i32,
+)
+
+fn report(text: string) -> string {
+    return case Customer.decode(text) {
+        Ok(c) -> "ok " + c.name;
+        Error(r) -> r.violations
+            .map({ v -> "[" + v.field + "] " + v.code })
+            .join(" ");
+    };
+}
+
+pub fn main() -> void {
+    print(report("""{"name": "ana", "address": {"street": "Rua A", "city": "Rio"}, "tags": ["vip"], "age": 30}"""));
+    // Values that do not decode, each at the path of the value.
+    print(report("""{"name": "ana", "address": {"street": "Rua A", "city": 9}, "tags": ["vip", 3], "age": "x"}"""));
+    // Values that decode and fail a constraint, at the same kind of path.
+    print(report("""{"name": "a", "address": {"street": "Rua A", "city": "Rio"}, "tags": [], "age": 1}"""));
+    // Text that is no JSON at all: one violation, at the document itself.
+    print(report("{nope"));
+    val nested = Customer.decode("""{"name": "ana", "address": {"street": " ", "city": "Rio"}, "tags": ["vip"], "age": 1}""");
+    print(case nested {
+        Ok(_) -> "";
+        Error(r) -> r.pretty();
+    });
+}

@@ -1,3 +1,29 @@
 //// Decision 668 — A function's type parameter is always bound by a parameter, never by the return type alone.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.email} from "validation";
+
+#[validated]
+pub type Invite(#[email] email: string)
+
+// `T` is bound by a parameter: the items, and the rule over them.
+fn firstValid<T>(items: T[], ok: fn(v: T) -> bool) -> ?T {
+    for (items) { item ->
+        if (ok(item)) return item;
+    }
+    return null;
+}
+
+// With no value to take `T` from, the type itself is the argument.
+fn nothing<T>(comptime t: type<T>) -> ?T {
+    return null;
+}
+
+pub fn main() -> void {
+    val invites = [Invite(email: "nope"), Invite(email: "ana@example.com"), Invite(email: "bo@example.com")];
+    val first = firstValid(invites, { i -> i.validate().isValid() });
+    print(first?.email ?? "none");
+
+    val none = nothing(Invite);
+    print(none?.email ?? "none");
+}

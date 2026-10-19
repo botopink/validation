@@ -1,3 +1,38 @@
 //// Decision 395 — A typed member reads its own type's typed meta through the decorator's type parameter, checked twice — pre-comptime in the decorator's body, post-comptime in the annotated type.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check} from "validation";
+
+fn passwordsMatch(s: Signup) -> bool {
+    return s.password == s.confirm;
+}
+
+fn notToSelf(t: Transfer) -> bool {
+    return t.source != t.target;
+}
+
+fn withinLimit(t: Transfer) -> bool {
+    return t.cents <= 100000;
+}
+
+#[validated, check("the passwords differ", passwordsMatch, at: .confirm)]
+pub type Signup(password: string, confirm: string)
+
+#[validated, check("a transfer needs two accounts", notToSelf, at: .target), check("over the daily limit", withinLimit, at: .cents)]
+pub type Transfer(source: string, target: string, cents: i64)
+
+fn messages(vs: string[]) -> string {
+    return vs.length.toString() + " [" + vs.join("; ") + "]";
+}
+
+pub fn main() -> void {
+    val s = Signup(password: "abc", confirm: "abd").validate().violations;
+    print(messages(s.map({ v -> v.message })));
+
+    val t = Transfer(source: "acc-1", target: "acc-1", cents: 250000).validate().violations;
+    print(messages(t.map({ v -> v.message })));
+
+    print(Transfer(source: "acc-1", target: "acc-2", cents: 500)
+        .validate()
+        .isValid());
+}

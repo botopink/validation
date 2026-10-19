@@ -1,3 +1,27 @@
 //// Decision 384 — A member a library's decorator writes resolves each name where it was written: the library's names in the decorator's module, the annotation's arguments in the annotated module — 112's hygiene for members.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.notBlank} from "validation";
+
+// This module's own `Violation` and `vNotBlank`, named like what the library's
+// member uses: the member never captures them.
+pub type Violation(rule: string, severity: i32)
+
+fn vNotBlank(text: string) -> bool {
+    return text.trim() != "";
+}
+
+fn passwordsMatch(s: Signup) -> bool {
+    return s.password == s.confirm;
+}
+
+#[validated, check("the passwords differ", passwordsMatch, at: .confirm)]
+pub type Signup(#[notBlank] handle: string, password: string, confirm: string)
+
+pub fn main() -> void {
+    val found = Signup(handle: " ", password: "abc", confirm: "abd").validate().violations;
+    print(found.map({ v -> v.field + ":" + v.code }).join(","));
+
+    val local = Violation(rule: "house-style", severity: 2);
+    print(local.rule, local.severity, vNotBlank(" "));
+}

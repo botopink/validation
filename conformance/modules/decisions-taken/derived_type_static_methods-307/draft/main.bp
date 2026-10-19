@@ -1,3 +1,37 @@
 //// Decision 307 — A derived type is a compile-time function that answers a new type, bound by a `val`; the five are static methods of one std type, `Type`:
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {types.Type} from "std";
+import {decorators.validated, decorators.notBlank, decorators.minValue} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Recipe(#[notBlank] title: string, #[minValue(1)] servings: i32, description: string)
+
+// Each derived type is a new record, named after its `val`; the source
+// fields' markers come with them.
+#[validated]
+pub val RecipePatch = Type.partial(Recipe);
+
+#[validated]
+pub val RecipeCard = Type.pick(Recipe, .title, .servings);
+
+fn shown<T>(r: Result<T, ValidationReport>) -> string {
+    return case r {
+        Ok(_) -> "ok";
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(RecipePatch.decode("""{"servings": 4}""")));
+    print(shown(RecipePatch.decode("""{"servings": 0}""")));
+    print(shown(RecipeCard.decode("""{"title": "Bolo", "servings": 8}""")));
+    print(shown(RecipeCard.decode("""{"title": "", "servings": 8}""")));
+    print(shown(RecipeCard.decode("""{"title": "Bolo", "servings": 8, "description": "x"}""")));
+
+    val card = RecipeCard(title: "Pão", servings: 2);
+    print(card.title, card.validate().isValid());
+}

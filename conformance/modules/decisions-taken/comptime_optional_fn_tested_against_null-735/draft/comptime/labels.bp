@@ -1,0 +1,22 @@
+//// The program's build layer: a decorator whose function argument is optional.
+
+import {compiler} from "std";
+
+// `#[labelled("…")]` or `#[labelled("…", describe)]`: the body tells the two
+// forms apart by testing the optional function against `null`.
+pub fn labelled<T>(
+    syntax decl: T,
+    comptime label: string,
+    comptime describe: ?fn(v: T) -> string = null,
+) -> void {
+    if (describe == null)
+        compiler.addMember("label", fn(self: T) -> string {
+            return label;
+        })
+    else {
+        val shown = describe!;
+        compiler.addMember("label", fn(self: T) -> string {
+            return label + " (" + shown(self) + ")";
+        });
+    }
+}

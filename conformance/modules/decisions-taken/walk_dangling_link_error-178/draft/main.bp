@@ -1,3 +1,38 @@
 //// Decision 178 — † A dangling link under `fs.walk` is an `Error` naming the link, on both targets — not skipped
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {io.fs} from "std";
+import {compiler} from "std";
+import {decorators.validated, decorators.notBlank} from "validation";
+
+#[validated]
+pub type Service(#[notBlank] name: string, port: i32)
+
+#[compiler.external(
+    .Erlang("""file:make_symlink($0, $1)"""),
+    .JavaScript("""require("fs").symlinkSync($0, $1)"""),
+)]
+declare fn makeLink(target: string, path: string) -> unknown;
+
+// Every file under `root` must be a valid service; a link to nothing is an
+// error of the walk, never a file quietly skipped.
+fn audit(root: string) -> string {
+    return case fs.walk(root) {
+        Ok(paths) -> paths
+            .map({ p -> p + " " + Service.decode(fs.readText(root + "/" + p).unwrapOr("")).isOk().toString() })
+            .join(", ");
+        Error(e) -> e.message();
+    };
+}
+
+pub fn main() -> void {
+    val root = "build/walk-services";
+    fs.removeTree(root);
+    fs.mkdirRecursive(root);
+    fs.writeText(root + "/api.json", """{"name": "api", "port": 8080}""");
+    print(audit(root));
+
+    makeLink("missing.json", root + "/db.json");
+    print(audit(root));
+    fs.removeTree(root);
+}

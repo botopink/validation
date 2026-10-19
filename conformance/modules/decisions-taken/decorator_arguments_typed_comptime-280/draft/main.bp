@@ -1,3 +1,48 @@
 //// Decision 280 — Decorator arguments are typed comptime values.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.check, decorators.refine, decorators.minValue, decorators.pattern, decorators.orElse, decorators.oneOf} from "validation";
+import {report.ValidationReport} from "validation";
+
+#[validated]
+pub type Tier { Standard, Premium }
+
+fn isEven(n: i32) -> bool {
+    return n % 2 == 0;
+}
+
+fn premiumBoxed(o: Order) -> bool {
+    return o.tier != Tier.Premium || o.boxes > 0;
+}
+
+// Every argument is a typed value of the build, checked where it is written:
+// a number, a text, a variant, two texts, a function, a field of `Order`.
+#[validated, check("a premium order ships boxed", premiumBoxed, at: .boxes)]
+pub type Order(
+    #[minValue(1)] quantity: i32,
+    #[pattern("^[A-Z]{3}-[0-9]{4}$")] sku: string,
+    #[orElse(.Standard)] tier: Tier,
+    #[oneOf("card", "pix")] payment: string,
+    #[refine(isEven)] boxes: i32,
+)
+
+fn tierName(t: Tier) -> string {
+    return case t {
+        Standard -> "standard";
+        Premium -> "premium";
+    };
+}
+
+fn shown(r: Result<Order, ValidationReport>) -> string {
+    return case r {
+        Ok(o) -> "ok " + o.sku + " " + tierName(o.tier);
+        Error(report) -> report.violations
+            .map({ v -> v.field + ":" + v.code })
+            .join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Order.decode("""{"quantity": 2, "sku": "ABC-1234", "payment": "pix", "boxes": 2}""")));
+    print(shown(Order.decode("""{"quantity": 0, "sku": "abc", "tier": "Premium", "payment": "cash", "boxes": 0}""")));
+}

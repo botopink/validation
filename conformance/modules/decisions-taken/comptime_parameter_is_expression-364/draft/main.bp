@@ -1,3 +1,31 @@
 //// Decision 364 — Every `comptime` parameter is an expression: `comptime x: @Expr<T>` — a decorator's, a tag annotation's, a template function's, any function's, a builtin's.
 
-pub fn main() -> void {}
+import {io.terminal.print} from "std";
+import {decorators.validated, decorators.minLength, decorators.maxLength, decorators.startsWith, decorators.refine} from "validation";
+import {report.ValidationReport} from "validation";
+
+fn notReserved(handle: string) -> bool {
+    return handle != "user_root";
+}
+
+// Each argument is an expression of the build, checked against the parameter's
+// type where it is written; the function is passed on and runs only when the
+// record is checked.
+#[validated]
+pub type Account(
+    #[minLength(2 + 3)] #[maxLength(4 * 4)] #[startsWith("user" + "_")] #[refine(notReserved)] handle: string,
+)
+
+fn shown(r: Result<Account, ValidationReport>) -> string {
+    return case r {
+        Ok(a) -> "ok " + a.handle;
+        Error(report) -> report.violations.map({ v -> v.code }).join(",");
+    };
+}
+
+pub fn main() -> void {
+    print(shown(Account.decode("""{"handle": "user_ana"}""")));
+    print(shown(Account.decode("""{"handle": "ana"}""")));
+    print(shown(Account.decode("""{"handle": "user_a_handle_far_too_long"}""")));
+    print(shown(Account.decode("""{"handle": "user_root"}""")));
+}
