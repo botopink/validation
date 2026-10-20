@@ -30,7 +30,7 @@ import {table.constraintTableJson};
 #[validated]
 pub type Player(
     username: string,
-    favoriteNumbers: Array<i32>,
+    favoriteNumbers: array<i32>,
 )
 
 fn failing() -> ValidationReport {

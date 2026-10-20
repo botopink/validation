@@ -34,7 +34,7 @@ pub type Violation(
 ) {
     // `#[message("…")]`: the violations of the marker it follows, under the
     // text the field gives instead of the template.
-    pub fn restated(vs: Array<Violation>, text: string) -> Array<Violation> {
+    pub fn restated(vs: array<Violation>, text: string) -> array<Violation> {
         return vs.map({ v ->
             Violation(
                 field: v.field,
@@ -47,22 +47,22 @@ pub type Violation(
 
     // A check of an optional field under `#[stopOnFirst]`: its violations
     // when the value is present, none when it is null.
-    pub fn onlyIf(present: bool, vs: Array<Violation>) -> Array<Violation> {
-        val none: Array<Violation> = [];
+    pub fn onlyIf(present: bool, vs: array<Violation>) -> array<Violation> {
+        val none: array<Violation> = [];
         if (present) return vs else return none;
     }
 
     // `#[stopOnFirst]`: the violations of the first check that answered any,
     // in the order the field writes its markers; none when every check passed.
-    pub fn firstFailing(lists: Array<Array<Violation>>) -> Array<Violation> {
+    pub fn firstFailing(lists: array<array<Violation>>) -> array<Violation> {
         val failing = lists.filter({ vs -> vs.length > 0 });
-        val none: Array<Violation> = [];
+        val none: array<Violation> = [];
         return failing.at(0) ?? none;
     }
 }
 
 pub type ValidationReport(
-    violations: Array<Violation>,
+    violations: array<Violation>,
 ) {
     pub fn isValid(self: Self) -> bool {
         return self.violations.length == 0;
@@ -101,8 +101,8 @@ pub type ValidationReport(
     // the root, or a key the root object does not declare — and, per first
     // path segment, the messages under that field, in report order.
     pub fn flatten(self: Self) -> Flat {
-        var form: Array<string> = [];
-        var fields: Dict<string, Array<string>> = Dict.empty();
+        var form: array<string> = [];
+        var fields: Dict<string, array<string>> = Dict.empty();
         var i = 0;
         while (i < self.violations.length) {
             val v = self.violations.at(i);
@@ -110,7 +110,7 @@ pub type ValidationReport(
                 val ps = parts(locatedAt(v));
                 if (ps.length == 0) form = form.append([v.message]) else {
                     val head = ps.slice(0, 1).map({ p -> p[1] }).join("");
-                    val before: Array<string> = fields.at(head) ?? [];
+                    val before: array<string> = fields.at(head) ?? [];
                     fields = fields.insert(head, before.append([v.message]));
                 }
             }
@@ -136,11 +136,11 @@ pub type ValidationReport(
     }
 
     pub fn empty() -> ValidationReport {
-        val none: Array<Violation> = [];
+        val none: array<Violation> = [];
         return ValidationReport(violations: none);
     }
 
-    pub fn of(violations: Array<Violation>) -> ValidationReport {
+    pub fn of(violations: array<Violation>) -> ValidationReport {
         return ValidationReport(violations: violations);
     }
 }
@@ -176,31 +176,31 @@ pub fn violation(
 
 // The two answers a constraint gives, as the array the emitted validator
 // appends: no violation, or exactly one.
-pub fn noViolation() -> Array<Violation> {
-    val none: Array<Violation> = [];
+pub fn noViolation() -> array<Violation> {
+    val none: array<Violation> = [];
     return none;
 }
 
-pub fn oneViolation(v: Violation) -> Array<Violation> {
+pub fn oneViolation(v: Violation) -> array<Violation> {
     return [v];
 }
 
 // ── step 9: the report's views ──────────────────────────────────────────────
 
 pub type Flat(
-    formErrors: Array<string>,
-    fieldErrors: Dict<string, Array<string>>,
+    formErrors: array<string>,
+    fieldErrors: Dict<string, array<string>>,
 )
 
 pub type ReportTree(
-    errors: Array<string>,
+    errors: array<string>,
     properties: Dict<string, ReportTree>,
-    items: Array<ReportTree>,
+    items: array<ReportTree>,
 ) {
     // The tree of a value nothing was said about.
     pub fn none() -> ReportTree {
-        val noErrors: Array<string> = [];
-        val noItems: Array<ReportTree> = [];
+        val noErrors: array<string> = [];
+        val noItems: array<ReportTree> = [];
         return ReportTree(
             errors: noErrors,
             properties: Dict.empty(),
@@ -224,7 +224,7 @@ fn prettyLine(v: Violation) -> string {
 
 fn placed(
     tree: ReportTree,
-    ps: Array<#(bool, string)>,
+    ps: array<#(bool, string)>,
     message: string,
 ) -> ReportTree {
     if (ps.length == 0)

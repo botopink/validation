@@ -39,7 +39,7 @@ fn farFuture() -> i64 {
     return clock.nowMillis() + clock.nowMillis();
 }
 
-fn codesOf(vs: Array<Violation>) -> string {
+fn codesOf(vs: array<Violation>) -> string {
     return vs.map({ v -> v.code }).join(",");
 }
 
@@ -60,8 +60,8 @@ test "validation: notBlank counts trimmed length" {
 test "validation: notEmpty counts length, not trimmed length" {
     assert vNotEmpty("a", " ").length == 0;
     assert codesOf(vNotEmpty("a", "")) == "notEmpty";
-    val some: Array<string> = ["x"];
-    val none: Array<string> = [];
+    val some: array<string> = ["x"];
+    val none: array<string> = [];
     assert vNotEmptyList("a", some).length == 0;
     assert codesOf(vNotEmptyList("a", none)) == "notEmpty";
 }
@@ -71,7 +71,7 @@ test "validation: sizeBetween is inclusive at both ends" {
     assert vSizeBetween("a", "abcd", 2, 4).length == 0;
     assert codesOf(vSizeBetween("a", "a", 2, 4)) == "sizeBetween";
     assert codesOf(vSizeBetween("a", "abcde", 2, 4)) == "sizeBetween";
-    val two: Array<string> = ["x", "y"];
+    val two: array<string> = ["x", "y"];
     assert vSizeBetweenList("a", two, 2, 4).length == 0;
     assert codesOf(vSizeBetweenList("a", two, 3, 4)) == "sizeBetween";
 }
@@ -150,7 +150,7 @@ pub type PartlyConstrained(
 #[validated]
 pub type EveryMarker(
     #[notNull] maybe: ?string,
-    #[notEmpty] tags: Array<string>,
+    #[notEmpty] tags: array<string>,
     #[positive] count: i32,
     #[positiveOrZero] ratio: f64,
     #[pastDate] createdAt: i64,
@@ -196,7 +196,7 @@ test "validation: a field with no constraint contributes nothing" {
 }
 
 test "validation: the remaining markers all fire through the emitted validator" {
-    val none: Array<string> = [];
+    val none: array<string> = [];
     val r = EveryMarker(
         maybe: null,
         tags: none,
@@ -211,7 +211,7 @@ test "validation: the remaining markers all fire through the emitted validator" 
 }
 
 test "validation: the same record with every marker satisfied is valid" {
-    val some: Array<string> = ["a"];
+    val some: array<string> = ["a"];
     val r = EveryMarker(
         maybe: "here",
         tags: some,
@@ -232,8 +232,8 @@ test "validation: the same record with every marker satisfied is valid" {
 // `"111000"`; a refused input the reference gives is named beside it.
 
 fn marks(
-    check: fn(s: string) -> Array<Violation>,
-    inputs: Array<string>,
+    check: fn(s: string) -> array<Violation>,
+    inputs: array<string>,
 ) -> string {
     return inputs.map({ s -> if (check(s).length == 0) "1" else "0" }).join("");
 }
@@ -258,8 +258,8 @@ test "validation: minLength, maxLength and length count code points" {
 }
 
 test "validation: the length markers count the items of a list, a dict and a set" {
-    val two: Array<i32> = [1, 2];
-    val one: Array<i32> = [1];
+    val two: array<i32> = [1, 2];
+    val one: array<i32> = [1];
     assert vMinLengthList("f", two, 2).length == 0;
     assert codesOf(vMinLengthList("f", one, 2)) == "minLength";
     assert vMaxLengthList("f", one, 1).length == 0;

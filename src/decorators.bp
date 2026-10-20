@@ -72,15 +72,15 @@ pub val transparent: Form = Form.Transparent;
 
 // `form` is `comptime form: ?Form = null`, read as a value.
 pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
-    var calls: Array<string> = [];
-    var rows: Array<string> = [];
+    var calls: array<string> = [];
+    var rows: array<string> = [];
     var problem = "";
     compiler
         .fields(decl)
         .forEach({ f ->
             val names = f.annotations.map({ a -> a.name });
-            var fieldCalls: Array<string> = [];
-            var fieldGuards: Array<string> = [];
+            var fieldCalls: array<string> = [];
+            var fieldGuards: array<string> = [];
             f.annotations.forEach({ a ->
                 val declared = f.typeName;
                 val nullable = declared.startsWith("?");
@@ -102,7 +102,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                     a.args.join("|").replaceAll("\"", "");
                 val n = a.name;
                 val isText = t == "string";
-                val isList = t.startsWith("Array<") || t.endsWith("[]");
+                val isList = t.startsWith("array<") || t.endsWith("[]");
                 var call = "";
                 var why = "";
                 if (n == "notNull")
@@ -129,7 +129,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                     else if (t.startsWith("Set<"))
                         call = "vNotEmptySet(" + q + ", " + read + ")"
                     else
-                        why = "it applies to `string`, `Array<T>`, `Dict<K, V>` and `Set<T>`, and this field is `"
+                        why = "it applies to `string`, `array<T>`, `Dict<K, V>` and `Set<T>`, and this field is `"
                             + declared
                             + "`";
                 if (n == "sizeBetween")
@@ -150,7 +150,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                             + raw
                             + ")"
                     else
-                        why = "it applies to `string` and `Array<T>`, and this field is `"
+                        why = "it applies to `string` and `array<T>`, and this field is `"
                             + declared
                             + "`";
                 if (n == "minValue")
@@ -277,7 +277,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                     else
                         itemRule(m, itemType, names);
                     if (itemType == "")
-                        why = "it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `"
+                        why = "it applies a marker to every item of an `array<T>` or a `Set<T>`, and this field is `"
                             + declared
                             + "`";
                     if (itemType != "" && itemCall.startsWith("!"))
@@ -357,7 +357,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                     + "` of `"
                     + compiler.name(decl)!
                     + "`: it skips the checks after the first failure, and this field has fewer than two";
-            var elements: Array<string> = [];
+            var elements: array<string> = [];
             var k = 0;
             while (k < fieldCalls.length) {
                 val c = fieldCalls.slice(k, k + 1).join("");
@@ -386,7 +386,7 @@ pub fn validated(syntax decl: unknown, comptime form: ?Form = null) -> void {
                 )
         });
     compiler.addMember(
-        "pub fn validate(self: Self) -> ValidationReport {\n    val v = self;\n    var __vs: Array<Violation> = [];\n"
+        "pub fn validate(self: Self) -> ValidationReport {\n    val v = self;\n    var __vs: array<Violation> = [];\n"
             + calls.join("\n")
             + "\n    return ValidationReport(violations: __vs);\n}",
     );
@@ -572,7 +572,7 @@ fn numberSuffix(t: string) -> string {
 
 fn collectionSuffix(t: string) -> string {
     if (t == "string") return "";
-    if ((t.startsWith("Array<") && t.endsWith(">")) || t.endsWith("[]"))
+    if ((t.startsWith("array<") && t.endsWith(">")) || t.endsWith("[]"))
         return "List";
     if (t.startsWith("Dict<")) return "Dict";
     if (t.startsWith("Set<")) return "Set";
@@ -628,7 +628,7 @@ fn refusedOn(applies: string, declared: string) -> string {
 // The call `#[each(marker)]` emits for one item (`__x`, at the path `__p`),
 // `"!" + why` for a marker that cannot check the item type, `"-"` for a
 // transform (`#[validated]` applies it), `""` for a name that is no marker.
-fn itemRule(m: string, t: string, names: Array<string>) -> string {
+fn itemRule(m: string, t: string, names: array<string>) -> string {
     if (transformNames().indexOf(m) >= 0) return "-";
     val number = numberSuffix(t);
     if (m == "notBlank" || m == "notEmpty" || m == "email") {
@@ -656,8 +656,8 @@ fn markerRule(
     declared: string,
     q: string,
     read: string,
-    args: Array<string>,
-    names: Array<string>,
+    args: array<string>,
+    names: array<string>,
 ) -> string {
     val raw = args.join(", ");
     val first = args.slice(0, 1).join("");
@@ -686,7 +686,7 @@ fn markerRule(
         val kind = collectionSuffix(t);
         if (kind == "?")
             return refusedOn(
-                "`string`, `Array<T>`, `Dict<K, V>` and `Set<T>`",
+                "`string`, `array<T>`, `Dict<K, V>` and `Set<T>`",
                 declared,
             );
         return predicateOf(n) + kind + "(" + q + ", " + read + ", " + raw + ")";
@@ -1214,13 +1214,13 @@ pub fn oneOf(syntax decl: unknown, comptime ..options: string[]) -> void {
 }
 
 // The options as `vOneOf` takes them: one comma-joined text.
-fn oneOfJoined(args: Array<string>) -> string {
+fn oneOfJoined(args: array<string>) -> string {
     return "\"" + args.map({ o -> unquoted(o) }).join(",") + "\"";
 }
 
 // Every marker `#[validated]` reads, in the order of this file — what
 // `#[validated]` asks of a field and what `test/refusal_test.bp` counts.
-pub fn markerNames() -> Array<string> {
+pub fn markerNames() -> array<string> {
     return "notNull|notBlank|notEmpty|sizeBetween|minValue|maxValue|positive|positiveOrZero|email|pattern|pastDate|futureDate|constraint|minLength|maxLength|length|startsWith|endsWith|includes|uppercase|lowercase|emailHtml5|emailRfc5322|emailUnicode|uuid|uuidV|guid|url|urlHost|urlProtocol|httpUrl|hostname|e164|emoji|base64|base64url|hex|jwt|jwtAlg|nanoid|cuid|cuid2|ulid|ipv4|ipv6|mac|macDelimiter|cidrv4|cidrv6|creditCard|currencyCode|iban|hash|hashEnc|isoDate|isoTime|isoTimePrecision|isoDatetime|isoDatetimeOffset|isoDatetimeLocal|isoDatetimePrecision|isoDuration|gt|lt|negative|negativeOrZero|multipleOf|safeInt|float32|afterIso|beforeIso|literal|oneOf".split(
         "|",
     );
@@ -1234,10 +1234,10 @@ pub fn markerNames() -> Array<string> {
 //     pub fn parse(input: Json) -> Result<Self, ValidationReport>        // Player.parse(doc)
 //     pub fn parseAt(input: Json, at: string) -> Result<Self, ValidationReport>
 //     pub fn decode(text: string) -> Result<Self, ValidationReport>
-//     pub fn bind(pairs: Array<#(string, string)>) -> Result<Self, ValidationReport>
+//     pub fn bind(pairs: array<#(string, string)>) -> Result<Self, ValidationReport>
 //     pub fn encode(v: Self) -> Result<Json, ValidationReport>
 //     pub fn jsonSchema() -> string
-//     pub fn options() -> Array<string>                                  // an enum
+//     pub fn options() -> array<string>                                  // an enum
 //
 // and three it calls on another type of the same kind — `__json`,
 // `__schemaNode`, `__schemaDefs` — named with `__` because no application
@@ -1260,7 +1260,7 @@ pub fn markerNames() -> Array<string> {
 //     import {json.Json} from "std";
 
 fn schemaIsList(t: string) -> bool {
-    return (t.startsWith("Array<") && t.endsWith(">")) || t.endsWith("[]");
+    return (t.startsWith("array<") && t.endsWith(">")) || t.endsWith("[]");
 }
 
 fn schemaItemOf(t: string) -> string {
@@ -1294,8 +1294,8 @@ fn schemaIsDeclared(t: string) -> bool {
 
 // `t` cut at every `sep` outside `<…>`, `(…)` and `[…]`, each part trimmed:
 // the arms of a union, the items of a tuple, the arguments of a generic.
-fn splitTop(t: string, sep: string) -> Array<string> {
-    var parts: Array<string> = [];
+fn splitTop(t: string, sep: string) -> array<string> {
+    var parts: array<string> = [];
     var depth = 0;
     var start = 0;
     var i = 0;
@@ -1323,7 +1323,7 @@ fn schemaIsTuple(t: string) -> bool {
     return t.startsWith("#(") && t.endsWith(")");
 }
 
-fn schemaTupleItems(t: string) -> Array<string> {
+fn schemaTupleItems(t: string) -> array<string> {
     return splitTop(t.slice(2, t.length() - 1), ",");
 }
 
@@ -1336,7 +1336,7 @@ fn schemaIsSet(t: string) -> bool {
 }
 
 // The arguments of `Dict<K, V>` / `Set<T>`.
-fn schemaArgs(t: string) -> Array<string> {
+fn schemaArgs(t: string) -> array<string> {
     val open = t.indexOf("<");
     return splitTop(t.slice(open + 1, t.length() - 1), ",");
 }
@@ -1515,9 +1515,9 @@ fn schemaUnionFn(
     val arms = splitTop(t, "|");
     val nullable = arms.filter({ a -> a.startsWith("?") || a == "Json" }).length
         > 0;
-    var body: Array<string> = [];
-    var parts: Array<string> = [];
-    var deps: Array<string> = [];
+    var body: array<string> = [];
+    var parts: array<string> = [];
+    var deps: array<string> = [];
     if (nullable == false)
         body.push(
             "    if (derived.isNull(input)) { throw derived.required(at); }",
@@ -1564,10 +1564,10 @@ fn schemaTupleFn(
     id: string,
 ) -> string {
     val items = schemaTupleItems(t);
-    var decoders: Array<string> = [];
-    var gathers: Array<string> = [];
-    var values: Array<string> = [];
-    var deps: Array<string> = [];
+    var decoders: array<string> = [];
+    var gathers: array<string> = [];
+    var values: array<string> = [];
+    var deps: array<string> = [];
     var i = 0;
     while (i < items.length) {
         val it = items.slice(i, i + 1).join("");
@@ -1601,7 +1601,7 @@ fn schemaTupleFn(
         + [items.length].join("")
         + ");\n"
         + decoders.join("\n")
-        + "\n    var __vs: Array<Violation> = [];\n"
+        + "\n    var __vs: array<Violation> = [];\n"
         + gathers.join("\n")
         + "\n    if (__vs.length > 0) { throw ValidationReport(violations: __vs); }\n"
         + "    return #("
@@ -1678,8 +1678,8 @@ fn encNeed(t: string, owner: string, field: string, id: string) -> string {
 fn encHelpers(t: string, owner: string, field: string, id: string) -> string {
     if (schemaIsUnion(t)) {
         val arms = splitTop(t, "|");
-        var body: Array<string> = [];
-        var deps: Array<string> = [];
+        var body: array<string> = [];
+        var deps: array<string> = [];
         var j = 0;
         while (j < arms.length) {
             val a = arms.slice(j, j + 1).join("");
@@ -1705,8 +1705,8 @@ fn encHelpers(t: string, owner: string, field: string, id: string) -> string {
     }
     if (schemaIsTuple(t)) {
         val items = schemaTupleItems(t);
-        var parts: Array<string> = [];
-        var deps: Array<string> = [];
+        var parts: array<string> = [];
+        var deps: array<string> = [];
         var i = 0;
         while (i < items.length) {
             val it = items.slice(i, i + 1).join("");
@@ -1753,9 +1753,9 @@ fn encHelpers(t: string, owner: string, field: string, id: string) -> string {
 // object with the tag member first.
 fn encEnumMembers(
     name: string,
-    variants: Array<string>,
+    variants: array<string>,
     tag: string,
-) -> Array<string> {
+) -> array<string> {
     val arms = variants.map({ v ->
         if (tag == "")
             "        " + v + " -> Json.Str(\"" + v + "\");"
@@ -1811,11 +1811,11 @@ fn jsKw(name: string, value: string) -> string {
     return "#(" + jsText(name) + ", " + value + ")";
 }
 
-fn jsObj(members: Array<string>) -> string {
+fn jsObj(members: array<string>) -> string {
     return "Json.Obj([" + members.join(", ") + "])";
 }
 
-fn jsArr(items: Array<string>) -> string {
+fn jsArr(items: array<string>) -> string {
     return "Json.Arr([" + items.join(", ") + "])";
 }
 
@@ -1869,7 +1869,7 @@ fn patternOf(n: string) -> string {
 
 // The keywords one marker adds to the node of a value of type `t`; a single
 // `"!"`-led element when it has none.
-fn markerKeywords(n: string, args: Array<string>, t: string) -> Array<string> {
+fn markerKeywords(n: string, args: array<string>, t: string) -> array<string> {
     val first = args.slice(0, 1).join("");
     val second = args.slice(1, 2).join("");
     val text = t == "string";
@@ -1887,7 +1887,7 @@ fn markerKeywords(n: string, args: Array<string>, t: string) -> Array<string> {
         "maxProperties"
     else
         "maxItems";
-    val none: Array<string> = [];
+    val none: array<string> = [];
     if (n == "minLength") return [jsKw(minKey, jsNum(first))];
     if (n == "maxLength") return [jsKw(maxKey, jsNum(first))];
     if (n == "length")
@@ -1949,12 +1949,12 @@ fn markerKeywords(n: string, args: Array<string>, t: string) -> Array<string> {
 }
 
 // The node of a type with no markers, as its members.
-fn typeKeywords(t: string, owner: string) -> Array<string> {
+fn typeKeywords(t: string, owner: string) -> array<string> {
     if (t == "string") return [jsKw("type", jsStr("string"))];
     if (t == "i32" || t == "i64") return [jsKw("type", jsStr("integer"))];
     if (t == "f64") return [jsKw("type", jsStr("number"))];
     if (t == "bool") return [jsKw("type", jsStr("boolean"))];
-    val none: Array<string> = [];
+    val none: array<string> = [];
     if (t == "Json") return none;
     if (t.startsWith("?"))
         return nullableKeywords(typeKeywords(t.slice(1, t.length()), owner));
@@ -2025,7 +2025,7 @@ fn typeKeywords(t: string, owner: string) -> Array<string> {
 
 // `?T`: a node that is a type alone takes `null` into its type; one with more
 // to say is `anyOf` with `{"type": "null"}` (§ 8.3 Nullability).
-fn nullableKeywords(members: Array<string>) -> Array<string> {
+fn nullableKeywords(members: array<string>) -> array<string> {
     if (members.length == 0) return members;
     val only = members.slice(0, 1).join("");
     val head = "#(\"type\", Json.Str(";
@@ -2042,8 +2042,8 @@ fn nullableKeywords(members: Array<string>) -> Array<string> {
 }
 
 // Every `#[validated]` type a type names, for its `$defs`.
-fn referencedTypes(t: string) -> Array<string> {
-    val none: Array<string> = [];
+fn referencedTypes(t: string) -> array<string> {
+    val none: array<string> = [];
     if (schemaIsBuiltin(t)) return none;
     if (t.startsWith("?")) return referencedTypes(t.slice(1, t.length()));
     if (schemaIsDeclared(t)) return [t];
@@ -2064,8 +2064,8 @@ fn referencedTypes(t: string) -> Array<string> {
     return referencedTypes(inner);
 }
 
-fn metaKeywords(annotations: Array<DeclAnnotation>) -> Array<string> {
-    var out: Array<string> = [];
+fn metaKeywords(annotations: array<DeclAnnotation>) -> array<string> {
+    var out: array<string> = [];
     annotations.forEach({ a ->
         val first = unquoted(a.args.slice(0, 1).join(""));
         if (a.name == "title") out.push(jsKw("title", jsStr(first)));
@@ -2084,7 +2084,7 @@ fn metaKeywords(annotations: Array<DeclAnnotation>) -> Array<string> {
 // metadata; `"!" + why` when a marker has no keyword.
 fn fieldNode(
     declared: string,
-    annotations: Array<DeclAnnotation>,
+    annotations: array<DeclAnnotation>,
     owner: string,
     isPresent: bool,
     hasDefault: bool,
@@ -2151,14 +2151,14 @@ fn fieldNode(
 fn schemaDocMembers(
     name: string,
     node: string,
-    refs: Array<string>,
-    annotations: Array<DeclAnnotation>,
-) -> Array<string> {
+    refs: array<string>,
+    annotations: array<DeclAnnotation>,
+) -> array<string> {
     val ids = annotations
         .filter({ a -> a.name == "schemaId" })
         .map({ a -> unquoted(a.args.join("")) });
     val id = ids.join("");
-    var steps: Array<string> = [];
+    var steps: array<string> = [];
     var i = 0;
     val unique = refs.filter({ r -> r != name });
     while (i < unique.length) {
@@ -2177,7 +2177,7 @@ fn schemaDocMembers(
     val stepText = if (steps.length > 0) steps.join("\n") + "\n" else "";
     return [
         "pub fn __schemaNode() -> Json {\n    return " + node + ";\n}",
-        "pub fn __schemaDefs(acc: Array<#(string, Json)>) -> Array<#(string, Json)> {\n"
+        "pub fn __schemaDefs(acc: array<#(string, Json)>) -> array<#(string, Json)> {\n"
             + "    if (derived.hasDef(acc, \""
             + name
             + "\")) { return acc; }\n"
@@ -2215,7 +2215,7 @@ fn unquoted(l: string) -> string {
 
 // The members every `#[validated]` type has from its `parseAt` (decision 327);
 // `decode` hands `derived.decodeText` the member `T.parseAt` as a value.
-fn schemaCommonMembers(name: string) -> Array<string> {
+fn schemaCommonMembers(name: string) -> array<string> {
     return [
         "pub fn parse(input: Json) -> Result<"
             + name
@@ -2246,12 +2246,12 @@ fn schemaCommonMembers(name: string) -> Array<string> {
 // payload record, fail where the emitted code names them.
 fn schemaEnum(
     name: string,
-    variants: Array<string>,
+    variants: array<string>,
     tag: string,
-) -> Array<string> {
+) -> array<string> {
     val options = "[" + variants.map({ v -> "\"" + v + "\"" }).join(", ") + "]";
     val head = "pub fn parseAt" + schemaResult(name);
-    val opts = "pub fn options() -> Array<string> {\n    return "
+    val opts = "pub fn options() -> array<string> {\n    return "
         + options
         + ";\n}";
     val last = variants.slice(variants.length - 1, variants.length).join("");
@@ -2353,14 +2353,14 @@ fn isNumberLexeme(l: string) -> bool {
     return strange.length == 0 && "0123456789".indexOf(body.slice(0, 1)) >= 0;
 }
 
-fn transformNames() -> Array<string> {
+fn transformNames() -> array<string> {
     return ["trim", "lowercased", "uppercased", "normalized", "normalizedUrl"];
 }
 
 // What `#[coerce]` reads a field's text as (`derived.coerced`); `""` for a type
 // it does not coerce. An `i64` beside `#[isoDatetime]` / `#[isoDatetimeOffset]`
 // reads an RFC 3339 instant as epoch milliseconds (Zod's `z.coerce.date()`).
-fn coerceHint(t: string, names: Array<string>) -> string {
+fn coerceHint(t: string, names: array<string>) -> string {
     if (t == "string" || t == "i32" || t == "f64" || t == "bool") return t;
     if (t == "i64") {
         if (names.indexOf("isoDatetime") >= 0) return "isoUtc";
@@ -2371,7 +2371,7 @@ fn coerceHint(t: string, names: Array<string>) -> string {
 }
 
 // How the form binder reads a field from text (`derived.formDocument`).
-fn formHint(declared: string, names: Array<string>) -> string {
+fn formHint(declared: string, names: array<string>) -> string {
     if (names.indexOf("stringbool") >= 0) return "stringbool";
     if (declared.startsWith("?"))
         return "opt:"
@@ -2384,7 +2384,7 @@ fn formHint(declared: string, names: Array<string>) -> string {
     return formScalarHint(declared, names);
 }
 
-fn formScalarHint(t: string, names: Array<string>) -> string {
+fn formScalarHint(t: string, names: array<string>) -> string {
     val h = coerceHint(t, names);
     if (h == "") return "raw";
     return h;
@@ -2435,10 +2435,10 @@ fn literalFor(l: string, t: string, declared: string) -> string {
 // (`""` for none), every other element one member, one `fn` each.
 fn parsing(
     name: string,
-    variants: Array<string>,
-    fields: Array<Field>,
-    annotations: Array<DeclAnnotation>,
-) -> Array<string> {
+    variants: array<string>,
+    fields: array<Field>,
+    annotations: array<DeclAnnotation>,
+) -> array<string> {
     val tags = annotations.filter({ a -> a.name == "tag" });
     val tag = if (tags.length > 0)
         unquoted(tags.slice(0, 1).map({ a -> a.args.join("") }).join(""))
@@ -2495,18 +2495,18 @@ fn parsing(
             + name
             + "`: a transparent type is written as its one field, and this type has "
             + [fields.length].join("");
-    var decoders: Array<string> = [];
-    var gathers: Array<string> = [];
-    var args: Array<string> = [];
-    var known: Array<string> = [];
-    var helpers: Array<string> = [];
-    var fallbacks: Array<string> = [];
-    var hints: Array<string> = [];
-    var encMembers: Array<string> = [];
+    var decoders: array<string> = [];
+    var gathers: array<string> = [];
+    var args: array<string> = [];
+    var known: array<string> = [];
+    var helpers: array<string> = [];
+    var fallbacks: array<string> = [];
+    var hints: array<string> = [];
+    var encMembers: array<string> = [];
     var encRest = "";
-    var properties: Array<string> = [];
-    var requiredNames: Array<string> = [];
-    var refs: Array<string> = [];
+    var properties: array<string> = [];
+    var requiredNames: array<string> = [];
+    var refs: array<string> = [];
     var restNode = "";
     val strictSchema = annotations.filter(
         { a -> a.name == "jsonSchema" },
@@ -2597,7 +2597,7 @@ fn parsing(
                 + f.name
                 + "` is `"
                 + declared
-                + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, Array<T>, Set<T>, Dict<K, V> (K string, i32 or a #[validated] enum), tuples, unions and other #[validated] types";
+                + "`, which this decorator does not decode - it reads string, i32, i64, f64, bool, Json, ?T, array<T>, Set<T>, Dict<K, V> (K string, i32 or a #[validated] enum), tuples, unions and other #[validated] types";
         val exhaustive = names.indexOf("exhaustive") >= 0;
         val isRest = names.indexOf("rest") >= 0;
         val isPresent = names.indexOf("present") >= 0;
@@ -2639,7 +2639,7 @@ fn parsing(
             .join("|");
         if (eachOps != "" && schemaIsList(declared) == false)
             problem = where
-                + "#[each] applies a transform to every item of an `Array<T>`, and this field is `"
+                + "#[each] applies a transform to every item of an `array<T>`, and this field is `"
                 + declared
                 + "`";
         if (eachOps != "" && schemaIsList(declared)) {
@@ -2926,7 +2926,7 @@ fn parsing(
         + ", ValidationReport> {\n"
         + shape
         + decoders.join("\n").replaceAll("__KNOWN__", known.join(", "))
-        + "\n    var __vs: Array<Violation> = [];\n"
+        + "\n    var __vs: array<Violation> = [];\n"
         + gathers.join("\n")
         + undeclared
         + "\n    if (__vs.length > 0) { throw ValidationReport(violations: __vs); }\n"
@@ -2962,7 +2962,7 @@ fn parsing(
             + "\") ?? Json.Null)"
     else
         "derived.formDocument(pairs, [" + hints.join(", ") + "])";
-    val bind = "pub fn bind(pairs: Array<#(string, string)>) -> Result<"
+    val bind = "pub fn bind(pairs: array<#(string, string)>) -> Result<"
         + name
         + ", ValidationReport> {\n    return try "
         + name
@@ -3006,7 +3006,7 @@ fn parsing(
 // with `fn `, and a body's lines are indented, so a line that starts with
 // `fn ` opens the next helper. Each is a private member of the annotated type
 // (decision 216), named `Owner.helper` where the type's members call it.
-fn helperFns(text: string) -> Array<string> {
+fn helperFns(text: string) -> array<string> {
     if (text == "") return [];
     return ("\n" + text)
         .split("\nfn ")
@@ -3193,7 +3193,7 @@ pub fn check<T>(
         compiler.fail("#[check] must annotate a field", at: decl);
 }
 
-// `z.array(z.email())`: a marker applied to every item of an `Array<T>` or a
+// `z.array(z.email())`: a marker applied to every item of an `array<T>` or a
 // `Set<T>`, each item's violation at its own path (`guests[1]`). One marker per
 // `#[each]`, written again for the next. The marker is named, not written as text: `#[each(email)]`; a decorator that
 // is no marker is refused by `#[validated]`.

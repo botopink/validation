@@ -36,13 +36,13 @@ pub type CpfConstraint() {
 
 // A message source over a fixed table: the test stand-in for a framework's
 // property reader. `""` for a key the table does not hold.
-fn lookup(entries: Array<#(string, string)>, key: string) -> string {
+fn lookup(entries: array<#(string, string)>, key: string) -> string {
     return entries.filter({ e -> e._0 == key }).at(0)?._1 ?? "";
 }
 
 fn tableSource(
     locale: string,
-    entries: Array<#(string, string)>,
+    entries: array<#(string, string)>,
 ) -> MessageSource {
     return MessageSource(
         locale: { -> locale },
@@ -54,11 +54,11 @@ fn cpf() -> CpfConstraint {
     return CpfConstraint();
 }
 
-fn codesOf(vs: Array<Violation>) -> string {
+fn codesOf(vs: array<Violation>) -> string {
     return vs.map({ v -> v.code }).join(",");
 }
 
-fn messagesOf(vs: Array<Violation>) -> string {
+fn messagesOf(vs: array<Violation>) -> string {
     return vs.map({ v -> v.message }).join(",");
 }
 

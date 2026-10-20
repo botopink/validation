@@ -31,11 +31,11 @@ pub type Entry(
     total: i64,
     done: bool,
     tag: ?Tag,
-    tags: Array<Tag>,
-    notes: ?Array<string>,
+    tags: array<Tag>,
+    notes: ?array<string>,
 )
 
-fn documents() -> Array<string> {
+fn documents() -> array<string> {
     return [
         """{"title": "a", "count": 1, "total": 2, "done": true, "tags": []}""",
         """{"title": "a", "count": 1, "total": 2, "done": false, "tag": {"label": "x", "weight": 0.5}, "tags": [{"label": "y", "weight": 2}], "notes": ["n"]}""",
@@ -85,7 +85,7 @@ fn digestOne(i: i32, r: Result<Entry, ValidationReport>) -> string {
 }
 
 fn digest() -> string {
-    var out: Array<string> = [];
+    var out: array<string> = [];
     var i = 0;
     val all = documents();
     while (i < all.length) {

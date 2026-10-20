@@ -124,7 +124,7 @@ test "validation: the same project with a decoded field type compiles" {
 #[validated]
 pub type Good(
     name: string,
-    scores: Array<i32>,
+    scores: array<i32>,
 )
 """,
         ].join(""),
@@ -231,14 +231,14 @@ test "validation: #[rest] on a field that is not Dict<string, T> is refused, and
             """
 #[validated]
 pub type Bad(
-    #[rest] extra: Array<string>,
+    #[rest] extra: array<string>,
 )
 """,
         ].join(""),
     );
     assert refusedWith(
         wrongType,
-        "#[rest] holds the members the type does not declare, so the field is `Dict<string, T>`, and this one is `Array<string>`",
+        "#[rest] holds the members the type does not declare, so the field is `Dict<string, T>`, and this one is `array<string>`",
         "7:3",
     );
     val two = checked(
@@ -273,14 +273,14 @@ test "validation: #[coerce] on a type it cannot read from text, and a transform 
 
 #[validated]
 pub type Bad(
-    #[coerce] ids: Array<i32>,
+    #[coerce] ids: array<i32>,
 )
 """,
         ].join(""),
     );
     assert refusedWith(
         coerced,
-        "#[validated] on field `ids` of `Bad`: #[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `Array<i32>`",
+        "#[validated] on field `ids` of `Bad`: #[coerce] reads text as `string`, `i32`, `i64`, `f64` or `bool` (or their `?T`), and this field is `array<i32>`",
         "6:3",
     );
     val trimmed = checked(
@@ -356,7 +356,7 @@ pub type Bad(
     );
     assert refusedWith(
         scalar,
-        "#[each] on field `contact` of `Bad`: it applies a marker to every item of an `Array<T>` or a `Set<T>`, and this field is `string`",
+        "#[each] on field `contact` of `Bad`: it applies a marker to every item of an `array<T>` or a `Set<T>`, and this field is `string`",
         "4:3",
     );
     val noMarker = checked(
@@ -366,7 +366,7 @@ import {report.ValidationReport, report.Violation, table.constraintTableJson} fr
 
 #[validated]
 pub type Bad(
-    #[each(title)] contacts: Array<string>,
+    #[each(title)] contacts: array<string>,
 )
 """,
     );
@@ -430,7 +430,7 @@ pub type Bad(a: string, b: string)
 // with a module per row, checked once; each module's refusal is asserted by
 // its message and its location. A marker added without a row fails the count.
 
-fn markerRows() -> Array<#(string, string, string)> {
+fn markerRows() -> array<#(string, string, string)> {
     return [
         #("notNull", "", "string"),
         #("notBlank", "", "i32"),
@@ -525,12 +525,12 @@ fn rowModule(row: #(string, string, string)) -> string {
 // a `main.bp` naming them all.
 fn checkedMarkers(
     fixture: string,
-    rows: Array<#(string, string, string)>,
+    rows: array<#(string, string, string)>,
 ) -> string {
     val dir = path.join([testTmp(), "refusal", fixture]);
     val made = process.run("mkdir", ["-p", path.join([dir, "src"])]);
     assert made.isOk();
-    var names: Array<string> = [];
+    var names: array<string> = [];
     var k = 0;
     while (k < rows.length) {
         names = names.append([["m_", [k].join("")].join("")]);
@@ -577,7 +577,7 @@ test "validation: every marker on a field type it cannot check is a located comp
     val rows = markerRows();
     val out = checkedMarkers("types", rows);
     assert out.startsWith("1\n");
-    var missing: Array<string> = [];
+    var missing: array<string> = [];
     var i = 0;
     while (i < rows.length) {
         val r = rows.at(i) ?? #("", "", "");
@@ -592,7 +592,7 @@ test "validation: every marker on a field type it cannot check is a located comp
 
 // Arguments a marker refuses, and an optional field type no marker reads
 // through: `#(marker, arguments, field type)`, and beside it the message.
-fn argumentRows() -> Array<#(string, string, string)> {
+fn argumentRows() -> array<#(string, string, string)> {
     return [
         #("minLength", "(0)", "string"),
         #("maxLength", "(-1)", "string"),
@@ -608,14 +608,14 @@ fn argumentRows() -> Array<#(string, string, string)> {
         #("multipleOf", "(0)", "i32"),
         #("multipleOf", "(1e-3)", "f64"),
         #("afterIso", "(\"2020-01-01\")", "i64"),
-        #("minLength", "(1)", "?Array<string>"),
+        #("minLength", "(1)", "?array<string>"),
         #("oneOf", "(\"a\")", "string"),
         #("oneOf", "(\"a\", \"\", \"b\")", "string"),
         #("literal", "(1.5)", "i32"),
     ];
 }
 
-fn argumentMessages() -> Array<string> {
+fn argumentMessages() -> array<string> {
     return [
         "#[minLength]: a lower bound below 1 could never fail",
         "#[maxLength]: the upper bound may not be negative",
@@ -644,7 +644,7 @@ test "validation: an argument a marker refuses is a compile error naming the rul
     assert rows.length == texts.length;
     val out = checkedMarkers("arguments", rows);
     assert out.startsWith("1\n");
-    var missing: Array<string> = [];
+    var missing: array<string> = [];
     var i = 0;
     while (i < texts.length) {
         val text = texts.at(i) ?? "";

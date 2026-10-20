@@ -33,7 +33,7 @@ pub type User(
     #[minValue(0)] age: ?i32,
     #[isoDatetime] createdAt: string,
     #[deprecated] nick: ?string,
-    friends: Array<User>,
+    friends: array<User>,
 )
 
 #[validated]

@@ -50,7 +50,7 @@ fn base64UrlChars() -> string {
     return "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 }
 
-fn chars(s: string) -> Array<string> {
+fn chars(s: string) -> array<string> {
     return s.split("");
 }
 
@@ -77,7 +77,7 @@ pub fn digitsValue(s: string) -> i32 {
 
 // The `s` split at every `sep`, in order. `"".split(".")` is `[""]` on both
 // targets; written out so the answer does not depend on it.
-fn parts(s: string, sep: string) -> Array<string> {
+fn parts(s: string, sep: string) -> array<string> {
     if (s == "") return [""];
     return s.split(sep);
 }

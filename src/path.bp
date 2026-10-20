@@ -51,9 +51,9 @@ pub fn index(at: string, i: i32) -> string {
 // `name`; `["a.b"].c` is `a.b`, `c`; the root is no part at all. An index and a
 // key spelled with digits read the same here — a reader that must tell them
 // apart reads the path itself.
-pub fn segments(field: string) -> Array<string> {
+pub fn segments(field: string) -> array<string> {
     val chars = field.split("");
-    var parts: Array<string> = [];
+    var parts: array<string> = [];
     var current = "";
     var quotedKey = false;
     var escaped = false;
@@ -94,9 +94,9 @@ pub fn head(field: string) -> string {
 
 // The parts of a path with what each is: `#(true, "2")` an index, `#(false,
 // "name")` a key — `segments` with the difference an index makes kept.
-pub fn parts(field: string) -> Array<#(bool, string)> {
+pub fn parts(field: string) -> array<#(bool, string)> {
     val chars = field.split("");
-    var out: Array<#(bool, string)> = [];
+    var out: array<#(bool, string)> = [];
     var current = "";
     var quotedKey = false;
     var escaped = false;
@@ -139,7 +139,7 @@ pub fn parts(field: string) -> Array<#(bool, string)> {
 }
 
 // A path rebuilt from its parts.
-pub fn joined(ps: Array<#(bool, string)>) -> string {
+pub fn joined(ps: array<#(bool, string)>) -> string {
     return ps.fold(
         "",
         { acc, p -> if (p[0]) index(acc, digitsOf(p[1])) else key(acc, p[1]) },

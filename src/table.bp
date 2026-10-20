@@ -92,7 +92,7 @@ pub fn renderParam(name: string, value: string) -> string {
 pub fn constraintJson(parts: string[]) -> string {
     val code = parts.at(1) ?? "";
     val names = paramNames(code);
-    var members: Array<#(string, string)> = [#("code", json.quote(code))];
+    var members: array<#(string, string)> = [#("code", json.quote(code))];
     var j = 0;
     while (j < names.length) {
         val nm = names.at(j) ?? "";
@@ -173,9 +173,9 @@ fn draft07Node(node: Json) -> Json {
     };
 }
 
-fn draft07Members(members: Array<#(string, Json)>) -> Array<#(string, Json)> {
+fn draft07Members(members: array<#(string, Json)>) -> array<#(string, Json)> {
     val tuple = members.filter({ m -> m[0] == "prefixItems" }).length > 0;
-    var out: Array<#(string, Json)> = [];
+    var out: array<#(string, Json)> = [];
     members.forEach({ m ->
         if (m[0] == "$schema")
             out.push(
@@ -223,8 +223,8 @@ fn isNullType(j: Json) -> bool {
         > 0;
 }
 
-fn openApiMembers(members: Array<#(string, Json)>) -> Array<#(string, Json)> {
-    var out: Array<#(string, Json)> = [];
+fn openApiMembers(members: array<#(string, Json)>) -> array<#(string, Json)> {
+    var out: array<#(string, Json)> = [];
     members.forEach({ m ->
         val k = m[0];
         val v = m[1];

@@ -96,7 +96,7 @@ fn some<T>(v: T) -> ?T {
 }
 
 fn nothing<T>(comptime t: type<T>) -> ?T {
-    val none: Array<T> = [];
+    val none: array<T> = [];
     return none.at(0);
 }
 
@@ -219,7 +219,7 @@ test "validation: a decorator calls a sibling function and takes a default" {
 }
 
 test "validation: a module is named through its namespace" {
-    val none: Array<Violation> = constraints.vNotBlank("f", "x");
+    val none: array<Violation> = constraints.vNotBlank("f", "x");
     assert none.length == 0;
 }
 

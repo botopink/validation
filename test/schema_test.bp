@@ -44,7 +44,7 @@ pub type Order(
     id: string,
     ship: Address,
     billing: ?Address,
-    lines: Array<Line>,
+    lines: array<Line>,
     tags: string[],
     note: ?string,
 )
@@ -52,7 +52,7 @@ pub type Order(
 #[validated]
 pub type Category(
     name: string,
-    subcategories: Array<Category>,
+    subcategories: array<Category>,
 )
 
 #[validated]
@@ -62,8 +62,8 @@ pub type Numbers(
     ratio: f64,
     on: bool,
     extra: Json,
-    grid: Array<Array<i32>>,
-    maybe: ?Array<string>,
+    grid: array<array<i32>>,
+    maybe: ?array<string>,
 )
 
 #[validated]
@@ -75,7 +75,7 @@ pub type Member(
 #[validated]
 pub type Team(
     lead: Member,
-    members: Array<Member>,
+    members: array<Member>,
 )
 
 fn teamCodes(r: Result<Team, ValidationReport>) -> string {
@@ -573,7 +573,7 @@ test "validation: a #[rest] member is decoded at its own key" {
 pub type FormSignup(
     email: string,
     age: i32,
-    tags: Array<string>,
+    tags: array<string>,
 )
 
 test "validation: bind over form pairs reports what does not read and builds nothing" {
@@ -644,7 +644,7 @@ test "validation: an enum default and fallback are its variants, by reference" {
 pub type Email(#[email] value: string)
 
 #[validated]
-pub type Invitation(owner: Email, guests: Array<Email>)
+pub type Invitation(owner: Email, guests: array<Email>)
 
 test "validation: a transparent type decodes, checks and encodes as its one field" {
     val doc = try json.decode(

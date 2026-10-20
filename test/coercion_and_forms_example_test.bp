@@ -37,7 +37,7 @@ pub type Newsletter(
     #[coerce] #[minValue(13)] age: i32,
     #[stringbool] terms: bool,
     #[coerce] #[isoDatetime] startsAt: i64,
-    tags: Array<string>,
+    tags: array<string>,
 )
 
 // The same fields, nothing coerced: a JSON string is not a number.

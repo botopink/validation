@@ -51,7 +51,7 @@ fn input(
 
 // The twenty inputs. Ten are valid in at least one field that another input
 // breaks, so every predicate is exercised on both sides of its boundary.
-fn inputs() -> Array<ParityUserRequest> {
+fn inputs() -> array<ParityUserRequest> {
     return [
         input("Ana", "ana@example.com", 30, "01310-100"),
         input("", "ana@example.com", 30, "01310-100"),
@@ -93,7 +93,7 @@ fn digestOne(index: i32, r: ValidationReport) -> string {
 // makes the digest sensitive to a predicate whose boundary moved by one, which
 // a set of inputs chosen only for variety would not be.
 fn digest() -> string {
-    var out: Array<string> = [];
+    var out: array<string> = [];
     var i = 0;
     val all = inputs();
     while (i < all.length) {
@@ -162,7 +162,7 @@ test "validation: the digest is not vacuous" {
 // nothing). One digest for both targets, so a predicate, a template or an
 // interpolation that answered differently on one of them reds here.
 
-fn row(name: string, ok: Array<Violation>, bad: Array<Violation>) -> string {
+fn row(name: string, ok: array<Violation>, bad: array<Violation>) -> string {
     val okText = ok.map({ v -> v.code }).join("+");
     val badText = bad.map({ v -> v.code + ":" + v.message }).join("+");
     return [name, "=", okText, "/", badText].join("");

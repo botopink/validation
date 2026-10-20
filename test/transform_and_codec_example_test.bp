@@ -53,7 +53,7 @@ fn isEven(n: i32) -> bool {
 #[validated]
 pub type Invite(
     #[minLength(1)] title: string,
-    #[each(email)] #[each(lowercased)] guests: Array<string>,
+    #[each(email)] #[each(lowercased)] guests: array<string>,
     #[preprocess(digitsToNumber)] seats: i32,
     #[check(isEven)] tables: i32,
 )

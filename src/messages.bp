@@ -153,7 +153,7 @@ fn lookupIn(src: MessageSource, code: string) -> string {
 // Substitution by name. Unknown placeholders survive verbatim because nothing
 // here scans for braces — only the bindings the constraint actually passed are
 // replaced.
-pub fn interpolate(template: string, args: Array<Arg>) -> string {
+pub fn interpolate(template: string, args: array<Arg>) -> string {
     return args.fold(
         template,
         { acc, a -> acc.replaceAll("{" + a.name + "}", a.value) },
@@ -167,20 +167,20 @@ pub fn message(
     builtIn: string,
     field: string,
     value: string,
-    params: Array<Arg>,
+    params: array<Arg>,
 ) -> string {
-    val base: Array<Arg> = [arg("field", field), arg("value", value)];
+    val base: array<Arg> = [arg("field", field), arg("value", value)];
     return interpolate(templateFor(code, builtIn), base.append(params));
 }
 
-pub fn noArgs() -> Array<Arg> {
-    val none: Array<Arg> = [];
+pub fn noArgs() -> array<Arg> {
+    val none: array<Arg> = [];
     return none;
 }
 
 // Every code `builtInTemplate` answers, in its order — what a locale must
 // hold a template for.
-pub fn codes() -> Array<string> {
+pub fn codes() -> array<string> {
     return "notNull|notBlank|notEmpty|sizeBetween|minValue|maxValue|positive|positiveOrZero|email|pattern|pastDate|futureDate|unknownConstraint|typeMismatch|required|invalidType|unrecognizedKey|invalidUnion|invalidValue|duplicate|invalidJson|custom|minLength|maxLength|length|startsWith|endsWith|includes|uppercase|lowercase|emailHtml5|emailRfc5322|emailUnicode|uuid|uuidV|guid|url|urlHost|urlProtocol|httpUrl|hostname|e164|emoji|base64|base64url|hex|jwt|jwtAlg|nanoid|cuid|cuid2|ulid|ipv4|ipv6|mac|macDelimiter|cidrv4|cidrv6|creditCard|currencyCode|iban|hash|hashEnc|isoDate|isoTime|isoTimePrecision|isoDatetime|isoDatetimeOffset|isoDatetimeLocal|isoDatetimePrecision|isoDuration|gt|lt|negative|negativeOrZero|multipleOf|safeInt|float32|afterIso|beforeIso|literal|oneOf".split(
         "|",
     );
@@ -283,7 +283,7 @@ pub fn builtInTemplate(code: string) -> string {
     return "is not valid";
 }
 
-// An i32 rendered as a decimal string by `Array<i32>.join("")`: node's `join`
+// An i32 rendered as a decimal string by `array<i32>.join("")`: node's `join`
 // calls `String(n)` per element and erlang's maps `is_integer(__E) ->
 // integer_to_binary(__E)`, so the single-element array is a cross-backend
 // `int_to_string` with no hand-rolled walk. The same shape answers for `i64`

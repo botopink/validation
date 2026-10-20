@@ -40,7 +40,7 @@ pub type Signup(
 //   pub fn parse(input: Json) -> Result<Signup, ValidationReport>
 //   pub fn parseAt(input: Json, at: string) -> Result<Signup, ValidationReport>
 //   pub fn decode(text: string) -> Result<Signup, ValidationReport>
-//   pub fn bind(pairs: Array<#(string, string)>) -> Result<Signup, ValidationReport>
+//   pub fn bind(pairs: array<#(string, string)>) -> Result<Signup, ValidationReport>
 //   pub fn encode(v: Signup) -> Result<Json, ValidationReport>
 //   pub fn jsonSchema() -> string
 

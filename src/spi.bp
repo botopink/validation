@@ -131,7 +131,7 @@ pub fn vConstraint(
     field: string,
     name: string,
     value: string,
-) -> Array<Violation> {
+) -> array<Violation> {
     if (rkvHas(name) == false)
         return oneViolation(
             violation(
@@ -183,7 +183,7 @@ declare fn schemaPut(id: string, document: fn() -> string) -> i32;
     .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __S = (__V.schemas ||= new Map()); return Array.from(__S.entries()).map(function(__E){ return [__E[0], __E[1]()]; }); })()"""),
     .Erlang("""(fun() -> [{VaI__, VaF__()} || {VaI__, VaF__} <- persistent_term:get({validation, schemas}, [])] end)()"""),
 )]
-declare fn schemaDocuments() -> Array<#(string, string)>;
+declare fn schemaDocuments() -> array<#(string, string)>;
 
 #[compiler.external(
     .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.schemas = new Map(); return 0; })()"""),

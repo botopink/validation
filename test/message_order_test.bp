@@ -19,7 +19,7 @@ import {json, json.Json} from "std";
 
 fn tableSource(
     locale: string,
-    rows: Array<#(string, string)>,
+    rows: array<#(string, string)>,
 ) -> MessageSource {
     return MessageSource(locale: { -> locale }, template: { key ->
         rows.filter({ r -> r[0] == key }).map({ r -> r[1] }).join("")

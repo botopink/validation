@@ -22,7 +22,7 @@ fn sameJson(a: Json, b: Json) -> bool {
     };
 }
 
-fn sameMembers(am: Array<#(string, Json)>, bm: Array<#(string, Json)>) -> bool {
+fn sameMembers(am: array<#(string, Json)>, bm: array<#(string, Json)>) -> bool {
     if (am.length != bm.length) return false;
     return am.filter({ m ->
         bm.filter({ n -> n[0] == m[0] && sameJson(m[1], n[1]) }).length == 0
@@ -30,7 +30,7 @@ fn sameMembers(am: Array<#(string, Json)>, bm: Array<#(string, Json)>) -> bool {
         == 0;
 }
 
-fn sameItems(ai: Array<Json>, bi: Array<Json>) -> bool {
+fn sameItems(ai: array<Json>, bi: array<Json>) -> bool {
     if (ai.length != bi.length) return false;
     var i = 0;
     var same = true;
@@ -106,7 +106,7 @@ test "validation: a recursive object refers to the root (§ 8.2 cycles)" {
 
 test "validation: the string formats are the reference's nodes (§ 8.3)" {
     val doc = Formats.jsonSchema();
-    val expected: Array<#(string, string)> = [
+    val expected: array<#(string, string)> = [
         #("email", """{"type": "string", "format": "email"}"""),
         #("at", """{"type": "string", "format": "date-time"}"""),
         #("day", """{"type": "string", "format": "date"}"""),
@@ -151,7 +151,7 @@ test "validation: metadata is the reference's annotations (§ 8.2 metadata)" {
 pub type Post(title: string, author: Writer)
 
 #[validated]
-pub type Writer(name: string, posts: Array<Post>)
+pub type Writer(name: string, posts: array<Post>)
 
 test "validation: another type is a $def, and draft-07 calls them definitions" {
     val doc = Post.jsonSchema();

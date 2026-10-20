@@ -50,7 +50,7 @@ declare fn rkvCount() -> i32;
     .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); var __O = __V.acc; __V.acc = []; return __O; })()"""),
     .Erlang("""(fun() -> case erase({validation, acc}) of undefined -> []; VaX__ -> VaX__ end end)()"""),
 )]
-declare fn rkvDrain() -> Array<Violation>;
+declare fn rkvDrain() -> array<Violation>;
 
 #[compiler.external(
     .JavaScript("""(function(){ var __V = (globalThis.__bp_validation ||= { constraints: new Map(), codes: new Map(), acc: [], messages: null }); __V.acc = []; return 0; })()"""),
@@ -91,7 +91,7 @@ pub fn bindingIsolated() -> bool {
     return rkvIsolated();
 }
 
-fn record(field: string, code: string, raw: string, params: Array<Arg>) -> i32 {
+fn record(field: string, code: string, raw: string, params: array<Arg>) -> i32 {
     return rkvPush(
         violation(
             field,
