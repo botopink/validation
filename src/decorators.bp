@@ -59,7 +59,7 @@
 //// is designed out at compile time.
 
 import {formats.isIsoDatetimeOffset, formats.nanoidPattern, formats.cuid2Pattern, formats.ulidPattern, formats.e164Pattern};
-import {json.Json, compiler, compiler.DeclAnnotation, compiler.DeclKind, compiler.Field} from "std";
+import {json.Json, compiler, compiler.DeclAnnotation, compiler.DeclKind, compiler.Field, compiler.Variant} from "std";
 
 // ── `#[validated]` ──────────────────────────────────────────────────────────
 
@@ -2239,11 +2239,11 @@ fn schemaCommonMembers(name: string) -> array<string> {
 // variant's own name: a variant's constructor is a name of the module, and a
 // record `Success` beside `Reply.Success` is constructed as the variant.
 //
-// LANGUAGE GAP: `compiler.variants(decl)` carries a variant's name and not its payload
-// fields or its annotations (`language-gaps.md`), so neither form can tell from here
-// whether a variant has a payload, nor read a marker on it: a payload-less
-// enum whose variant carries fields, and a tagged one whose variant has no
-// payload record, fail where the emitted code names them.
+// LANGUAGE GAP: `Variant.fields` now says whether a variant has a payload, but no
+// decision fixes the refusal text or the derivation (a record per variant read
+// from `fields`), so a payload-less enum whose variant carries fields, and a
+// tagged one whose variant has no payload record, still fail where the emitted
+// code names them.
 fn schemaEnum(
     name: string,
     variants: array<string>,
@@ -2435,10 +2435,11 @@ fn literalFor(l: string, t: string, declared: string) -> string {
 // (`""` for none), every other element one member, one `fn` each.
 fn parsing(
     name: string,
-    variants: array<string>,
+    entries: array<Variant>,
     fields: array<Field>,
     annotations: array<DeclAnnotation>,
 ) -> array<string> {
+    val variants = entries.map({ e -> e.name });
     val tags = annotations.filter({ a -> a.name == "tag" });
     val tag = if (tags.length > 0)
         unquoted(tags.slice(0, 1).map({ a -> a.args.join("") }).join(""))
