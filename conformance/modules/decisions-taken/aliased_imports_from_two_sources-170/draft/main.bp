@@ -15,7 +15,7 @@ fn logged(v: FieldViolation) -> AuditEntry {
 pub fn main() -> void {
     val found: FieldViolation[] = Link(title: "", href: "not a url").validate().violations;
     val entries = found.map({ v -> logged(v) });
-    for e in entries {
+    for (entries) { e ->
         print(e.at + " " + e.rule + " " + e.severity.toString());
     }
 }

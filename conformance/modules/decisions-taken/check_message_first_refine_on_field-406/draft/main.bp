@@ -32,7 +32,7 @@ pub fn main() -> void {
     print(good.validate().isValid());
 
     val bad = Booking(handle: "admin", password: "s3cret", confirm: "secret", seats: 3, tables: 5);
-    for v in bad.validate().violations {
+    for (bad.validate().violations) { v ->
         print(v.field + " " + v.code + ": " + v.message);
     }
 }

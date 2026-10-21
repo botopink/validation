@@ -8,7 +8,7 @@ pub type Invite(#[email] email: string)
 
 // `T` is bound by a parameter: the items, and the rule over them.
 fn firstValid<T>(items: T[], ok: fn(v: T) -> bool) -> ?T {
-    for item in items {
+    for (items) { item ->
         if (ok(item)) return item;
     }
     return null;
