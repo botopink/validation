@@ -7,7 +7,7 @@
 //// `ValidationReport` are what a client bundle obtains, and it obtains them
 //// without importing anything that does I/O.
 ////
-//// JSON is written with `json.quote` / `json.object` / `json.array` (std,
+//// JSON is written with `json.quote` / `json.object` / `json.arrayOf` (std,
 //// decision 116 rule 3), so every control character in a message is escaped
 //// as RFC 8259 requires — the private escaper this file used to carry escaped
 //// five characters only.
