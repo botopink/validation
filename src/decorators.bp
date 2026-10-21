@@ -1749,26 +1749,31 @@ fn encHelpers(t: string, owner: string, field: string, id: string) -> string {
     return encNeed(inner, owner, field, id + "_0");
 }
 
+// The record a tagged variant's payload is: the type of its one field `value`,
+// read from the variant's entry (`Success(value: ReplySuccess)` → `ReplySuccess`).
+fn payloadOf(e: Variant) -> string {
+    return e.fields.map({ f -> f.typeName }).slice(0, 1).join("");
+}
+
 // What `#[validated]` on an enum writes: the variant's name; tagged, the payload's
 // object with the tag member first.
 fn encEnumMembers(
     name: string,
-    variants: array<string>,
+    entries: array<Variant>,
     tag: string,
 ) -> array<string> {
-    val arms = variants.map({ v ->
+    val arms = entries.map({ e ->
         if (tag == "")
-            "        " + v + " -> Json.Str(\"" + v + "\");"
+            "        " + e.name + " -> Json.Str(\"" + e.name + "\");"
         else
             "        "
-                + v
+                + e.name
                 + "(value) -> derived.tagged("
-                + name
-                + v
+                + payloadOf(e)
                 + ".__json(value), \""
                 + tag
                 + "\", \""
-                + v
+                + e.name
                 + "\");"
     });
     return [
@@ -2238,17 +2243,12 @@ fn schemaCommonMembers(name: string) -> array<string> {
 // as the variant's one field `value` (`Success(value: ReplySuccess)`). Not the
 // variant's own name: a variant's constructor is a name of the module, and a
 // record `Success` beside `Reply.Success` is constructed as the variant.
-//
-// LANGUAGE GAP: `Variant.fields` now says whether a variant has a payload, but no
-// decision fixes the refusal text or the derivation (a record per variant read
-// from `fields`), so a payload-less enum whose variant carries fields, and a
-// tagged one whose variant has no payload record, still fail where the emitted
-// code names them.
 fn schemaEnum(
     name: string,
-    variants: array<string>,
+    entries: array<Variant>,
     tag: string,
 ) -> array<string> {
+    val variants = entries.map({ e -> e.name });
     val options = "[" + variants.map({ v -> "\"" + v + "\"" }).join(", ") + "]";
     val head = "pub fn parseAt" + schemaResult(name);
     val opts = "pub fn options() -> array<string> {\n    return "
@@ -2295,15 +2295,15 @@ fn schemaEnum(
                 + v
                 + "(__rest, at);"
         });
-    val payloads = variants.map({ v ->
+    val payloads = entries.map({ e ->
+        val v = e.name;
         "fn __decode"
             + name
             + "_"
             + v
             + schemaResult(name)
             + "    val __v = try "
-            + name
-            + v
+            + payloadOf(e)
             + ".parseAt(input, at);\n    return "
             + name
             + "."
@@ -2459,26 +2459,41 @@ fn parsing(
                 jsKw(
                     "oneOf",
                     jsArr(
-                        variants.map({ v ->
+                        entries.map({ e ->
                             "derived.withTag("
-                                + name
-                                + v
+                                + payloadOf(e)
                                 + ".__schemaNode(), "
                                 + jsText(tag)
                                 + ", "
-                                + jsText(v)
+                                + jsText(e.name)
                                 + ")"
                         }),
                     ),
                 ),
             ].append(metaKeywords(annotations)),
         );
-    val enumRefs = if (tag == "") [] else variants.map({ v -> name + v });
+    val enumRefs = if (tag == "") [] else entries.map({ e -> payloadOf(e) });
     if (isEnum) {
-        val parsed = schemaEnum(name, variants, tag);
-        return [parsed.slice(0, 1).join(""), ""]
+        var refusal = "";
+        entries.forEach({ e ->
+            if (tag == "" && e.fields.length > 0)
+                refusal = "#[validated] on `"
+                    + name
+                    + "`: the variant `"
+                    + e.name
+                    + "` carries a payload, and an enum without #[tag] is its variants' names; add #[tag(\"...\")] or write the variant without fields";
+            if (tag != "" && e.fields.length != 1)
+                refusal = "#[tag] on `"
+                    + name
+                    + "`: the variant `"
+                    + e.name
+                    + "` must carry its payload as one field `value` of a #[validated] record, and it has "
+                    + [e.fields.length].join("");
+        });
+        val parsed = schemaEnum(name, entries, tag);
+        return [parsed.slice(0, 1).join(""), refusal]
             .append(parsed.slice(1, parsed.length))
-            .append(encEnumMembers(name, variants, tag))
+            .append(encEnumMembers(name, entries, tag))
             .append(schemaDocMembers(name, enumNode, enumRefs, annotations))
             .append(schemaCommonMembers(name));
     }

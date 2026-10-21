@@ -43,12 +43,8 @@ pub type Catch(
 )
 
 // `z.discriminatedUnion("status", [...])`. Each variant's payload is a
-// `#[validated]` record named after the enum and the variant, and the enum's
-// decoder reads `status` first.
-//
-// LANGUAGE GAP: `Variant.fields` reflects the payload, but no decision fixes
-// deriving the payload record from it; it stays a record the decoder reaches by
-// name.
+// `#[validated]` record read from the variant's own field (`value`), and the
+// enum's decoder reads `status` first.
 #[validated]
 pub type ReplySuccess(data: string)
 
