@@ -954,7 +954,7 @@ pub fn jsonText(j: Json) -> string {
         Bool(value) -> if (value) "true" else "false";
         Num(value) -> numberText(value);
         Str(value) -> json.quote(value);
-        Arr(items) -> json.array(items.map({ i -> jsonText(i) }));
+        Arr(items) -> json.arrayOf(items.map({ i -> jsonText(i) }));
         Obj(members) -> json.object(
             members.map({ m -> #(m[0], jsonText(m[1])) }),
         );

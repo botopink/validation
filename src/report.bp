@@ -79,7 +79,7 @@ pub type ValidationReport(
 
     pub fn toJson(self: Self) -> string {
         val rows = self.violations.map({ v -> violationJson(v) });
-        return json.object([#("errors", json.array(rows))]);
+        return json.object([#("errors", json.arrayOf(rows))]);
     }
 
     // RFC 9457. `type` is `about:blank` because the status code alone carries
@@ -92,7 +92,7 @@ pub type ValidationReport(
                 #("type", json.quote("about:blank")),
                 #("title", json.quote("Validation failed")),
                 #("status", "400"),
-                #("errors", json.array(rows)),
+                #("errors", json.arrayOf(rows)),
             ],
         );
     }
