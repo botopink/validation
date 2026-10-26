@@ -12,7 +12,7 @@ and back, its form binder and its JSON Schema (decisions 306, 327).
 One source compiled for erlang and commonJS, so the server's handler and the
 client's form run the same predicate. Moved from rakun front 14's validation
 member (`repository/rakun/modules/rakun-validation`) by
-`specs/1.0.10-beta/01-std/06-validation-lib`.
+`specs/01-std/06-validation-lib`.
 
 Imports `std` and nothing else. Ships `.bp` files only — no `.erl`, no `.mjs`;
 target-native code is inline `#[@External.<Target>(…)]` templates (decision 117
