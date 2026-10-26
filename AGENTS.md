@@ -33,7 +33,7 @@ A `#[validated]` record in a consumer imports only `from "validation"` and
 
 ```text
 validation/
-├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
+├── botopink.json     "name": "validation", "target": "erlang", "targets": ["erlang", "beam", "commonJS"] (no wasm: `putMessageSource` (its own) and std `regex.matches`, `io.clock.nowMillis`, `io.env.read` and `io.process.cwd` have no `.Wasm(…)` binding, decision 993 (4)), no dependencies
 ├── AGENTS.md         ← you are here
 ├── conformance/      ← the reference (`docs.md`, one section per module) and its `AGENTS.md`; no cell yet, the suite in `test/` holds the behaviour (decisions 457, 463)
 ├── src/
