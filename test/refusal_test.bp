@@ -17,13 +17,12 @@ fn testTmp() -> string {
     return root;
 }
 
-// This package's directory: two levels above this file, which
-// `compiler.src()` names relative to the package under `botopink test` and
-// prefixed by the load directory when a program loads the package
-// (decision 993 (3)) — never the process's working directory.
+// This package's directory: `compiler.src().root`, the directory a program
+// loaded the package from (decision 1003), `""` under `botopink test`, which
+// runs from the package root — never a guess from this file's path.
 fn packageRoot() -> string {
-    val file = (comptime compiler.src()).file;
-    return path.resolve([process.cwd(), path.dirname(path.dirname(file))]);
+    val root = (comptime compiler.src()).root;
+    return path.resolve([process.cwd(), if (root == "") "." else root]);
 }
 
 // The compiler the fixtures are checked with: `BOTOPINK_BIN` when the caller
